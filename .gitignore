@@ -1,0 +1,44 @@
+# Data — never committed; see README section 5 for how to place the raw dataset
+data/raw/*
+data/processed/*
+data/splits/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/splits/.gitkeep
+
+# Trained models
+models/
+*.pkl
+*.joblib
+*.pt
+*.pth
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Optuna / experiment artefacts
+*.db
+optuna_study/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# LaTeX build artefacts (report lives on Overleaf)
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.bbl
+*.blg
