@@ -9,6 +9,7 @@ matplotlib>=3.7
 seaborn>=0.13
 jupyter>=1.0
 pytest>=7.4
+openpyxl>=3.1
 
 # Phase 2 — deep learning (uncomment when Phase 2 starts)
 # torch>=2.1

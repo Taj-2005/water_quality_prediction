@@ -16,8 +16,9 @@ DATA_SPLITS = ROOT / "data" / "splits"
 REPORTS = ROOT / "reports"
 FIGURES = REPORTS / "figures"
 
+RAW_CSV = DATA_RAW / "Combined_dataset.csv"
 CLEAN_CSV = DATA_PROCESSED / "clean.csv"
 
-# Set once docs/target_definition.md is agreed. Everything downstream reads these.
-TARGET_COLUMN: str | None = None
-TARGET_KIND: str | None = None  # "regression" or "classification"
+# Confirmed target (see docs/target_definition.md). Everything downstream reads these.
+TARGET_COLUMN: str = "CCME_Values"
+TARGET_KIND: str = "regression"  # "regression" or "classification"
