@@ -49,6 +49,11 @@ PH_MIN, PH_MAX = 0.0, 14.0
 TEMP_IMPLAUSIBLE_C = 40.0        # observed max is 98 C, impossible for surface water
 NON_NEGATIVE = [c for c in MEASUREMENTS if c != "Temperature (cel)"]
 
+# A measurement column whose single most common value accounts for more than this share
+# of rows is not a natural distribution - it is a fill value. See the upstream-imputation
+# section of docs/data_dictionary.md for the evidence.
+IMPUTATION_SHARE_THRESHOLD = 0.05
+
 
 def load_raw() -> pd.DataFrame:
     """Read the raw CSV with explicit dtypes and a parsed date column.
@@ -105,6 +110,60 @@ def flag_impossible_values(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, in
     return df, counts
 
 
+def flag_upstream_imputation(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, dict[str, float]]]:
+    """Flag values that were median-imputed before the dataset reached us.
+
+    The file reports zero missing values, but five of the eight measurement columns
+    carry their own exact median as the single most frequent value, at 11-32% of rows.
+    No natural measurement distribution does that; it is the signature of a median fill
+    applied upstream, during the harmonization we did not run.
+
+    This matters beyond tidiness. The project rule is that imputation is fitted on the
+    training split only, and that rule is already broken by the data as delivered: the
+    upstream fill used medians computed over every row, including the rows that will
+    become our test set. We cannot undo it, so we mark it, and let Parth's pipeline and
+    Jivit's ablation measure the cost instead of inheriting it silently.
+
+    Adds, per affected column, ``<column>__imputed_upstream``; then
+    ``n_imputed_upstream`` (how many of a row's measurements are suspect) and
+    ``flag_any_imputed_upstream``.
+    """
+    report: dict[str, dict[str, float]] = {}
+    flag_cols: list[str] = []
+
+    for col in MEASUREMENTS:
+        counts = df[col].value_counts()
+        modal_value = counts.index[0]
+        share = counts.iloc[0] / len(df)
+        if share < IMPUTATION_SHARE_THRESHOLD:
+            continue
+
+        flag = f"{col}__imputed_upstream"
+        df[flag] = df[col] == modal_value
+        flag_cols.append(flag)
+        report[col] = {
+            "modal_value": float(modal_value),
+            "rows": int(counts.iloc[0]),
+            "share": float(share),
+            "median": float(df[col].median()),
+            # The median signature is the strong evidence. Where the modal value is not
+            # the median the fill is likelier a per-country or per-site constant, so the
+            # flag is still raised but the finding is weaker - stated, not overstated.
+            "equals_median": bool(np.isclose(modal_value, df[col].median())),
+        }
+
+    if flag_cols:
+        df["n_imputed_upstream"] = df[flag_cols].sum(axis=1).astype("int8")
+        df["flag_any_imputed_upstream"] = df["n_imputed_upstream"] > 0
+    else:
+        df["n_imputed_upstream"] = np.int8(0)
+        df["flag_any_imputed_upstream"] = False
+
+    return df, report
+
+
 def drop_exact_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """Remove rows identical across all 14 original columns.
 
@@ -112,7 +171,14 @@ def drop_exact_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     including them would not change which rows match, but excluding them keeps the
     definition of "duplicate" tied to the source data.
     """
-    original = [c for c in df.columns if not c.startswith("flag_") and c != "Date_parsed"]
+    derived = ("flag_", "n_imputed_upstream")
+    original = [
+        c
+        for c in df.columns
+        if not c.startswith(derived)
+        and not c.endswith("__imputed_upstream")
+        and c != "Date_parsed"
+    ]
     before = len(df)
     df = df.drop_duplicates(subset=original, keep="first").reset_index(drop=True)
     return df, before - len(df)
@@ -147,6 +213,14 @@ def clean(verbose: bool = True) -> pd.DataFrame:
     df, counts = flag_impossible_values(df)
     for label, n in counts.items():
         log(f"  flagged {label}: {n:,}")
+
+    df, imputation = flag_upstream_imputation(df)
+    for col, info in imputation.items():
+        log(f"  flagged upstream imputation in {col}: {info['rows']:,} rows "
+            f"({100 * info['share']:.2f}%) at value {info['modal_value']:g}"
+            f"{' = column median' if info['equals_median'] else ''}")
+    log(f"  columns showing the median signature: "
+        f"{sum(i['equals_median'] for i in imputation.values())} of {len(MEASUREMENTS)}")
 
     df, removed = drop_exact_duplicates(df)
     log(f"  removed exact duplicates: {removed:,}  ({100 * removed / (len(df) + removed):.2f}%)")

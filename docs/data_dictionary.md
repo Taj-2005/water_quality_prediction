@@ -80,8 +80,47 @@ Two consequences the report must state:
    rows, including those that will become our test set.
 2. Any model fed these columns is partly fitting a constant, not a measurement.
 
-`src/clean.py` therefore adds a `*_imputed_upstream` flag per affected column so Parth's
-pipeline and Jivit's ablation can measure the effect instead of inheriting it silently.
+`src/clean.py` therefore adds, per measurement column whose modal value exceeds 5 % of
+rows, a `<column>__imputed_upstream` boolean, plus `n_imputed_upstream` (how many of a
+row's 8 measurements are suspect, 0–8) and `flag_any_imputed_upstream`. All 8 columns
+cross the threshold; 5 carry the median signature.
+
+#### How much of the table is affected
+
+| Suspect measurements in a row | Rows | Share |
+| :--- | :--- | :--- |
+| 0 — fully measured | 1,102,041 | **39.11 %** |
+| 1 | 602,467 | 21.38 % |
+| 2 | 408,139 | 14.48 % |
+| 3 | 190,526 | 6.76 % |
+| 4 or more | 514,833 | **18.27 %** |
+
+Only 39 % of rows are free of fill values, and 18 % have at least half their chemistry
+filled in.
+
+#### The imputation is almost entirely England
+
+| Country | Mean suspect measurements per row | Rows |
+| :--- | :--- | :--- |
+| England | **2.037** | 2,127,897 |
+| Ireland | 0.040 | 234,993 |
+| China | 0.016 | 45,977 |
+| USA | 0.014 | 405,245 |
+| Canada | 0.008 | 3,894 |
+
+This is the finding with the most consequences for modelling, and it is **not** a
+cleaning problem:
+
+1. `n_imputed_upstream` is a near-perfect proxy for `Country == England`, which is
+   75.3 % of the dataset. Any model given these flags can learn country membership from
+   them.
+2. The target moves with the flag: mean `CCME_Values` is **91.31** for fully measured
+   rows versus **75.89** for rows with 3 suspect measurements. Fill status and water
+   quality are confounded, so a model can score well by detecting *which country filled
+   its gaps* rather than by learning chemistry.
+3. Parth's site-separated split cannot fix this, because the confound follows the sites.
+
+Raised for the team in `02_eda.ipynb`; the report's Limitations section must state it.
 
 ### Detection limits
 
