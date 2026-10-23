@@ -61,17 +61,21 @@ incompatible water quality standards.
 - **Location:** `data/raw/Combined_dataset.csv`
 - **Documentation:** every column — unit, meaning, source, license — is recorded in
   [docs/data_dictionary.md](docs/data_dictionary.md).
-- **Raw data is never edited in place and never committed.** `data/` is git-ignored
-  except for its folder structure; see [Reproducing results](#6-reproducing-results).
+- **Raw data is never edited in place.** `data/raw/Combined_dataset.csv` (305 MiB) is
+  tracked with **Git LFS**, so `git lfs install` is required before cloning or you will
+  receive a pointer file instead of the data. Everything else under `data/` —
+  `processed/` and `splits/` — stays git-ignored and is regenerated locally; see
+  [Reproducing results](#6-reproducing-results).
 
 ### Data handling rules
 
 | Stage | Rule |
 | :--- | :--- |
-| Units | made consistent across all rows before anything else |
-| Detection limits | values like `<0.5` handled by **one stated rule**, documented in the cleaning notebook |
-| Impossible values | **flagged**, not silently deleted (e.g. pH outside 0–14, negative turbidity) |
-| Duplicates | exact duplicates removed |
+| Units | verified consistent per column (mg/l, pH units, °C); no mixed-unit rows found |
+| Detection limits | none present — verified in [docs/data_dictionary.md](docs/data_dictionary.md); the upstream harmonization already resolved censored values |
+| Upstream imputation | 5 of 8 measurement columns carry their exact median at 11–32 % of rows; flagged per column rather than silently inherited |
+| Impossible values | **flagged**, not silently deleted (pH outside 0–14, negative concentrations, temperature above 40 °C) |
+| Duplicates | 9,971 exact duplicate rows (0.35 %) removed |
 | Imputation | **not** done during cleaning — it lives in the preprocessing pipeline and is fitted on **train only** |
 
 ---
