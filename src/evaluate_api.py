@@ -14,14 +14,13 @@ Downstream implementations land in:
 from __future__ import annotations
 
 import warnings
-
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any
 
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 
-from src.config import CLEAN_CSV, CLEAN_PARQUET, DATA_SPLITS, TARGET_COLUMN, TARGET_KIND
+from src.config import CLEAN_CSV, CLEAN_PARQUET
 
 
 def _restore_dtypes(df: pd.DataFrame) -> pd.DataFrame:
@@ -128,7 +127,7 @@ def load_data(path: Path | str | None = None) -> pd.DataFrame:
 
 def get_splits(
     splits_dir: Path | str | None = None,
-) -> Tuple[Any, Any, Any, Any, Any, Any]:
+) -> tuple[Any, Any, Any, Any, Any, Any]:
     """Return the shared, seeded train/validation/test split.
 
     The actual split implementation will be completed by Parth in ``src/split.py``
@@ -186,9 +185,10 @@ def evaluate(y_true, y_pred) -> dict[str, float]:
     """
     try:
         from src.metrics import regression_metrics
+
         return regression_metrics(y_true, y_pred)
-    except (ImportError, NotImplementedError):
+    except (ImportError, NotImplementedError) as exc:
         raise NotImplementedError(
             "Evaluation metrics are not yet implemented. Satya will implement "
             "regression_metrics(y_true, y_pred) [MAE, RMSE, R2] in src/metrics.py."
-        )
+        ) from exc

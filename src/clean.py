@@ -26,10 +26,10 @@ Run:
 from __future__ import annotations
 
 import argparse
-import sys
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 
 from src.config import CLEAN_CSV, CLEAN_PARQUET, DATA_PROCESSED, RAW_CSV
 
@@ -51,7 +51,7 @@ DATE_FORMAT = "%d-%m-%Y"
 # Physically impossible or implausible readings. Rows are flagged, never dropped:
 # deleting them would hide a data-quality problem the report has to discuss.
 PH_MIN, PH_MAX = 0.0, 14.0
-TEMP_IMPLAUSIBLE_C = 40.0        # observed max is 98 C, impossible for surface water
+TEMP_IMPLAUSIBLE_C = 40.0  # observed max is 98 C, impossible for surface water
 NON_NEGATIVE = [c for c in MEASUREMENTS if c != "Temperature (cel)"]
 
 # A measurement column whose single most common value accounts for more than this share
@@ -73,7 +73,7 @@ def load_raw() -> pd.DataFrame:
         )
     df = pd.read_csv(
         RAW_CSV,
-        dtype={c: "category" for c in CATEGORICALS + ["Area"]},
+        dtype=dict.fromkeys(CATEGORICALS + ["Area"], "category"),
         low_memory=False,
     )
     # Every one of the 2,827,977 dates parses with this format; errors="raise" keeps it
@@ -97,9 +97,7 @@ def flag_impossible_values(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, in
     counts["negative concentration"] = int(negative.sum())
 
     df["flag_temp_implausible"] = df["Temperature (cel)"] > TEMP_IMPLAUSIBLE_C
-    counts[f"temperature above {TEMP_IMPLAUSIBLE_C:.0f} C"] = int(
-        df["flag_temp_implausible"].sum()
-    )
+    counts[f"temperature above {TEMP_IMPLAUSIBLE_C:.0f} C"] = int(df["flag_temp_implausible"].sum())
 
     # Sub-zero water temperature is plausible for saline water, so it is flagged for
     # review rather than treated as impossible.
@@ -107,9 +105,7 @@ def flag_impossible_values(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, in
     counts["temperature below 0 C (review only)"] = int(df["flag_temp_below_zero"].sum())
 
     df["flag_any_impossible"] = (
-        df["flag_ph_out_of_range"]
-        | df["flag_negative_measurement"]
-        | df["flag_temp_implausible"]
+        df["flag_ph_out_of_range"] | df["flag_negative_measurement"] | df["flag_temp_implausible"]
     )
     counts["rows with any impossible value"] = int(df["flag_any_impossible"].sum())
     return df, counts
@@ -180,9 +176,7 @@ def drop_exact_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     original = [
         c
         for c in df.columns
-        if not c.startswith(derived)
-        and not c.endswith("__imputed_upstream")
-        and c != "Date_parsed"
+        if not c.startswith(derived) and not c.endswith("__imputed_upstream") and c != "Date_parsed"
     ]
     before = len(df)
     df = df.drop_duplicates(subset=original, keep="first").reset_index(drop=True)
@@ -198,7 +192,10 @@ def check_detection_limits(df: pd.DataFrame) -> dict[str, int]:
     """
     hits = {}
     for col in MEASUREMENTS:
-        if df[col].dtype == object:
+        # Test for "not numeric" rather than "is object": pandas 3 gives string columns
+        # the dedicated `str` dtype, so an `== object` test silently never fires and this
+        # check would quietly pass on exactly the data it exists to catch.
+        if not is_numeric_dtype(df[col]):
             hits[col] = int(df[col].astype(str).str.contains("<|>", regex=True).sum())
     return hits
 
@@ -212,8 +209,10 @@ def clean(verbose: bool = True) -> pd.DataFrame:
     log(f"  raw: {len(df):,} rows x {df.shape[1] - 1} columns")
 
     censored = check_detection_limits(df)
-    log(f"  detection-limit values in measurement columns: "
-        f"{sum(censored.values()) if censored else 0}")
+    log(
+        f"  detection-limit values in measurement columns: "
+        f"{sum(censored.values()) if censored else 0}"
+    )
 
     df, counts = flag_impossible_values(df)
     for label, n in counts.items():
@@ -221,11 +220,15 @@ def clean(verbose: bool = True) -> pd.DataFrame:
 
     df, imputation = flag_upstream_imputation(df)
     for col, info in imputation.items():
-        log(f"  flagged upstream imputation in {col}: {info['rows']:,} rows "
+        log(
+            f"  flagged upstream imputation in {col}: {info['rows']:,} rows "
             f"({100 * info['share']:.2f}%) at value {info['modal_value']:g}"
-            f"{' = column median' if info['equals_median'] else ''}")
-    log(f"  columns showing the median signature: "
-        f"{sum(i['equals_median'] for i in imputation.values())} of {len(MEASUREMENTS)}")
+            f"{' = column median' if info['equals_median'] else ''}"
+        )
+    log(
+        f"  columns showing the median signature: "
+        f"{sum(i['equals_median'] for i in imputation.values())} of {len(MEASUREMENTS)}"
+    )
 
     df, removed = drop_exact_duplicates(df)
     log(f"  removed exact duplicates: {removed:,}  ({100 * removed / (len(df) + removed):.2f}%)")
@@ -240,15 +243,19 @@ def clean(verbose: bool = True) -> pd.DataFrame:
 def profile(df: pd.DataFrame) -> None:
     """Print the figures that back docs/data_dictionary.md."""
     n = len(df)
-    print(f"\nrows={n:,}  unique Area={df['Area'].nunique():,}  "
-          f"dates {df['Date_parsed'].min().date()} -> {df['Date_parsed'].max().date()}")
+    print(
+        f"\nrows={n:,}  unique Area={df['Area'].nunique():,}  "
+        f"dates {df['Date_parsed'].min().date()} -> {df['Date_parsed'].max().date()}"
+    )
     print("\nmeasurement columns:")
     for col in MEASUREMENTS:
         s = df[col]
         mode = s.value_counts().head(1)
-        print(f"  {col:36s} min={s.min():>9.3f} max={s.max():>9.3f} "
-              f"mean={s.mean():>8.3f} median={s.median():>8.3f} "
-              f"mode={mode.index[0]:<8} ({100 * mode.iloc[0] / n:5.2f}%)")
+        print(
+            f"  {col:36s} min={s.min():>9.3f} max={s.max():>9.3f} "
+            f"mean={s.mean():>8.3f} median={s.median():>8.3f} "
+            f"mode={mode.index[0]:<8} ({100 * mode.iloc[0] / n:5.2f}%)"
+        )
     print("\ncategorical columns:")
     for col in CATEGORICALS:
         print(f"  {col}:")
@@ -258,10 +265,14 @@ def profile(df: pd.DataFrame) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--profile", action="store_true",
-                    help="print the dataset profile instead of writing the output")
-    ap.add_argument("--no-csv", action="store_true",
-                    help="write only clean.parquet, skip the 586 MB CSV")
+    ap.add_argument(
+        "--profile",
+        action="store_true",
+        help="print the dataset profile instead of writing the output",
+    )
+    ap.add_argument(
+        "--no-csv", action="store_true", help="write only clean.parquet, skip the 586 MB CSV"
+    )
     args = ap.parse_args()
 
     df = clean()
@@ -277,13 +288,11 @@ def main() -> None:
     for col in CATEGORICALS + ["Area"]:
         df[col] = df[col].astype("category")
     df.to_parquet(CLEAN_PARQUET, compression="zstd", index=False)
-    print(f"\nwrote {CLEAN_PARQUET.name}  "
-          f"({CLEAN_PARQUET.stat().st_size / 1e6:.0f} MB, committed)")
+    print(f"\nwrote {CLEAN_PARQUET.name}  ({CLEAN_PARQUET.stat().st_size / 1e6:.0f} MB, committed)")
 
     if not args.no_csv:
         df.to_csv(CLEAN_CSV, index=False)
-        print(f"wrote {CLEAN_CSV.name}  "
-              f"({CLEAN_CSV.stat().st_size / 1e6:.0f} MB, git-ignored)")
+        print(f"wrote {CLEAN_CSV.name}  ({CLEAN_CSV.stat().st_size / 1e6:.0f} MB, git-ignored)")
     print(f"{len(df):,} rows x {df.shape[1]} columns")
 
 

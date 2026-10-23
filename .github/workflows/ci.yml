@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch rather than paying for both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # IMPORTANT: never set lfs: true here. The raw dataset is 305 MiB and the
+          # repository has a 1 GiB/month LFS bandwidth allowance shared by the whole
+          # team - pulling it on every push would exhaust that in a handful of runs.
+          # The tests are built to run without it.
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install tooling
+        # Deliberately not the full requirements.txt: xgboost, shap, optuna and jupyter
+        # add minutes to every run and none of them are needed to lint or to test the
+        # cleaning rules. The modelling stack is exercised locally and in the notebooks.
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest pandas numpy
+
+      - name: Lint
+        run: ruff check src/ tests/
+
+      - name: Format check
+        run: ruff format --check src/ tests/
+
+      - name: Tests
+        run: pytest tests/ -v
+
+  notebooks:
+    name: Notebook hygiene
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install nbformat
+
+      - name: Notebooks are valid and contain no error outputs
+        # A notebook committed with a traceback in its outputs is a notebook that did not
+        # run. The work plan requires every notebook to execute top to bottom.
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          import nbformat
+
+          failed = False
+          for path in sorted(pathlib.Path("notebooks").glob("*.ipynb")):
+              nb = nbformat.read(path, as_version=4)
+              nbformat.validate(nb)
+              errors = [
+                  o for c in nb.cells
+                  for o in getattr(c, "outputs", [])
+                  if o.get("output_type") == "error"
+              ]
+              executed = sum(1 for c in nb.cells if c.cell_type == "code" and c.execution_count)
+              total = sum(1 for c in nb.cells if c.cell_type == "code")
+              status = "FAIL" if errors else "ok"
+              print(f"{status:4}  {path.name}  {executed}/{total} cells executed, {len(errors)} errors")
+              if errors:
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PY

@@ -1,0 +1,33 @@
+[project]
+name = "water-quality-prediction"
+version = "0.1.0"
+description = "Water quality prediction from physical and chemical measurements (CSAI Project 18)"
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["notebooks", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes: undefined names, unused imports
+    "I",    # import sorting
+    "UP",   # pyupgrade: outdated syntax
+    "B",    # bugbear: likely bugs
+    "C4",   # comprehension simplifications
+]
+ignore = [
+    "E501",  # line length is enforced by the formatter, not the linter
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Stubs intentionally accept arguments they do not use yet.
+"src/preprocess.py" = ["ARG001"]
+"src/features.py" = ["ARG001"]
+"src/metrics.py" = ["ARG001"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

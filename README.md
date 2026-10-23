@@ -361,6 +361,25 @@ Taj: repo + branch rules + seed
 
 ## 9. Contributing workflow
 
+### Quality gate
+
+Every push and pull request runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+lint, format check, unit tests, and a check that no notebook was committed carrying an
+error traceback in its outputs. Run the same checks locally before pushing:
+
+```bash
+ruff check src/ tests/        # lint
+ruff format src/ tests/       # format (use --check to verify without writing)
+pytest tests/                 # unit tests
+```
+
+The tests run on small synthetic frames and **never touch the dataset**. That is
+deliberate: CI checks out with `lfs: false`, because pulling the 305 MiB raw file on
+every push would exhaust the repository's 1 GiB/month LFS bandwidth allowance — which is
+shared by all five of us. Correctness on the real data is demonstrated by
+[`notebooks/01_cleaning.ipynb`](notebooks/01_cleaning.ipynb), whose outputs are committed.
+
+
 - **One branch per person**, named `feat/<name>-<task>` (e.g. `feat/taj-cleaning`).
 - Open a **pull request into `main`** and wait for the team lead's review (Taj). **Never push straight to `main`.**
 - **Commit small and often** with clear messages — each member's contribution must be
