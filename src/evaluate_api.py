@@ -13,12 +13,46 @@ Downstream implementations land in:
 
 from __future__ import annotations
 
+import warnings
+
 from pathlib import Path
 from typing import Any, Tuple
 
 import pandas as pd
+from pandas.api.types import is_datetime64_any_dtype
 
 from src.config import CLEAN_CSV, CLEAN_PARQUET, DATA_SPLITS, TARGET_COLUMN, TARGET_KIND
+
+
+def _restore_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+    """Give a CSV-loaded frame the dtypes the parquet file carries.
+
+    CSV stores no type information, so a fallback read returns dates as strings and
+    flags as the literal text "True"/"False". Code written against the parquet path
+    then fails in confusing ways - ``.dt`` on a string column, for instance. Restoring
+    the dtypes here makes the two paths interchangeable, which is the only thing that
+    makes a fallback safe.
+    """
+    from src.clean import CATEGORICALS
+
+    if "Date_parsed" in df.columns and not is_datetime64_any_dtype(df["Date_parsed"]):
+        df["Date_parsed"] = pd.to_datetime(df["Date_parsed"], errors="coerce")
+
+    for col in CATEGORICALS + ["Area"]:
+        if col in df.columns and not isinstance(df[col].dtype, pd.CategoricalDtype):
+            df[col] = df[col].astype("category")
+
+    for col in df.columns:
+        if col.startswith("flag_") or col.endswith("__imputed_upstream"):
+            if df[col].dtype == object:
+                df[col] = df[col].map({"True": True, "False": False}).astype(bool)
+            else:
+                df[col] = df[col].astype(bool)
+
+    if "n_imputed_upstream" in df.columns:
+        df["n_imputed_upstream"] = df["n_imputed_upstream"].astype("int8")
+
+    return df
 
 
 def load_data(path: Path | str | None = None) -> pd.DataFrame:
@@ -63,9 +97,33 @@ def load_data(path: Path | str | None = None) -> pd.DataFrame:
             "'git pull'. To regenerate it from the raw data instead, run "
             "'python -m src.clean'."
         )
-    if target.suffix == ".parquet":
+    if target.suffix != ".parquet":
+        return _restore_dtypes(pd.read_csv(target, low_memory=False))
+
+    try:
         return pd.read_parquet(target)
-    return pd.read_csv(target, low_memory=False)
+    except ImportError as exc:
+        # The environment has no parquet engine. This is almost always a Jupyter kernel
+        # pointing at the wrong interpreter rather than a missing install, so say so.
+        if path is None and CLEAN_CSV.exists():
+            warnings.warn(
+                f"No parquet engine available, falling back to {CLEAN_CSV.name}. "
+                "Install pyarrow (pip install -r requirements.txt) and select the "
+                "project .venv as your kernel to use the faster parquet path.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return _restore_dtypes(pd.read_csv(CLEAN_CSV, low_memory=False))
+        raise ImportError(
+            "Reading clean.parquet needs a parquet engine (pyarrow), and this "
+            "environment has none.\n"
+            "  1. Install the project requirements INTO THE ENVIRONMENT THAT RUNS THIS "
+            "CODE:  pip install -r requirements.txt\n"
+            "  2. In Jupyter or VS Code, check the kernel: it must be the project "
+            "'.venv', not a global interpreter. VS Code: Select Kernel -> Python "
+            "Environments -> .venv\n"
+            "  3. Or regenerate the CSV instead:  python -m src.clean"
+        ) from exc
 
 
 def get_splits(

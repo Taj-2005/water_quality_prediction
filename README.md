@@ -197,8 +197,34 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Then place the raw dataset in `data/raw/` under the filename recorded in
-[docs/data_dictionary.md](docs/data_dictionary.md).
+### Notebook kernel
+
+Register the virtual environment as a Jupyter kernel, once per machine:
+
+```bash
+python -m ipykernel install --user --name water-quality \
+    --display-name "Python (water_quality .venv)"
+```
+
+Then select **Python (water_quality .venv)** as the kernel in every notebook. A kernel
+pointing at a global interpreter is the usual cause of:
+
+```
+ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+```
+
+The packages are in `requirements.txt`, but they are installed into the venv — not into
+whichever interpreter your notebook happens to be running. `load_data()` falls back to
+`clean.csv` when no parquet engine is present, so the notebook still works; it is just
+slower and loses the category and boolean dtypes.
+
+### Raw data
+
+The raw dataset is tracked with Git LFS, so a fresh clone needs:
+
+```bash
+git lfs install && git lfs pull
+```
 
 ---
 
