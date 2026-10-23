@@ -230,10 +230,13 @@ explain **the whole pipeline** in the viva, not only their own part.
 
 ### Roster
 
+**Team lead:** Shaik Tajuddin ([@Taj-2005](https://github.com/Taj-2005)) — owns the
+repository, reviews every pull request, and is the point of contact for the faculty.
+
 | Name | Enrollment | Email | GitHub |
 | :--- | :--- | :--- | :--- |
+| Shaik Tajuddin *(team lead)* | 2401010436 | shaik.tajuddin2024@nst.rishihood.edu.in | [@Taj-2005](https://github.com/Taj-2005) |
 | Parthraj Singh Bhati | 2401010320 | parthraj.bhati2024@nst.rishihood.edu.in | [@parthrajsinghbhati](https://github.com/parthrajsinghbhati) |
-| Shaik Tajuddin | 2401010436 | shaik.tajuddin2024@nst.rishihood.edu.in | [@Taj-2005](https://github.com/Taj-2005) |
 | Himanshu Pandey | 2401020095 | himanshu.h2024@nst.rishihood.edu.in | [@14-himanshu](https://github.com/14-himanshu) |
 | Jivit Rana | 2401010202 | jivit.rana2024@nst.rishihood.edu.in | [@Jivit87](https://github.com/Jivit87) |
 | Satya Yadav | 2401010427 | satya.yadav2024@nst.rishihood.edu.in | [@ACE-pwd](https://github.com/ACE-pwd) |
@@ -242,25 +245,26 @@ explain **the whole pipeline** in the viva, not only their own part.
 
 | Member | Role | Owns | Branch prefix |
 | :--- | :--- | :--- | :--- |
-| **Parthraj** | Repo, target, split, pipeline, final evaluation | `docs/target_definition.md`, `src/split.py`, `src/preprocess.py`, `src/evaluate_api.py`, `06_evaluation.ipynb`, `07_shap.ipynb` | `feat/parth-*` |
-| **Tajuddin** | Data dictionary, cleaning, EDA | `docs/data_dictionary.md`, `src/clean.py`, `01_cleaning.ipynb`, `02_eda.ipynb` | `feat/taj-*` |
+| **Tajuddin** *(lead)* | Team lead, repository, data dictionary, cleaning, EDA | `README.md`, `requirements.txt`, `.gitignore`, `src/config.py`, `docs/data_dictionary.md`, `src/clean.py`, `01_cleaning.ipynb`, `02_eda.ipynb` | `feat/taj-*` |
+| **Parthraj** | Target, split, pipeline, final evaluation | `docs/target_definition.md`, `src/split.py`, `src/preprocess.py`, `src/evaluate_api.py`, `06_evaluation.ipynb`, `07_shap.ipynb` | `feat/parth-*` |
 | **Himanshu** | Literature review, feature engineering, Random Forest | `docs/refs.bib`, `src/features.py`, `src/models_rf.py`, `04_random_forest.ipynb` | `feat/himanshu-*` |
 | **Jivit** | XGBoost, ablation | `src/models_xgb.py`, `05_xgboost.ipynb`, `reports/xgb_results.csv` | `feat/jivit-*` |
 | **Satya** | IEEE report, presentation, metrics, naive baseline | Overleaf project, deck, `src/metrics.py`, `03_naive_baseline.ipynb`, `docs/viva_prep.md` | `feat/satya-*` |
 
-Per-member write-ups: [notes_parth.md](docs/notes_parth.md) · [notes_taj.md](docs/notes_taj.md) ·
+Per-member write-ups: [notes_taj.md](docs/notes_taj.md) · [notes_parth.md](docs/notes_parth.md) ·
 [notes_himanshu.md](docs/notes_himanshu.md) · [notes_jivit.md](docs/notes_jivit.md) ·
 [notes_satya.md](docs/notes_satya.md)
 
 ### Order of work
 
-The repo, target and shared interface come first, because nobody can code without them;
-then the cleaned data, because every model depends on it. Himanshu, Jivit and Satya then
-work in parallel, Parth evaluates the saved models, and Satya assembles the report and
-deck from everyone's sections.
+The repository and the shared interface come first, because nobody can code without
+them; then the cleaned data, because every model depends on it. Himanshu, Jivit and Satya
+then work in parallel, Parth evaluates the saved models, and Satya assembles the report
+and deck from everyone's sections.
 
 ```
-Parth: repo + target + interface
+Taj: repo + branch rules + seed
+   └─> Parth: target + shared interface
         └─> Taj: data dictionary + cleaning
                  └─> Parth: split + preprocessing pipeline
                           ├─> Himanshu: features + Random Forest
@@ -275,7 +279,7 @@ Parth: repo + target + interface
 ## 9. Contributing workflow
 
 - **One branch per person**, named `feat/<name>-<task>` (e.g. `feat/taj-cleaning`).
-- Open a **pull request into `main`** and wait for Parth's review. **Never push straight to `main`.**
+- Open a **pull request into `main`** and wait for the team lead's review (Taj). **Never push straight to `main`.**
 - **Commit small and often** with clear messages — each member's contribution must be
   visible in the history, since the viva is individually assessed.
 - Fixed random seed everywhere; no result is reported that the commands above cannot reproduce.
