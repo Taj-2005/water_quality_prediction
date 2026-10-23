@@ -19,6 +19,11 @@ FIGURES = REPORTS / "figures"
 RAW_CSV = DATA_RAW / "Combined_dataset.csv"
 CLEAN_CSV = DATA_PROCESSED / "clean.csv"
 
+# The cleaned table is committed as parquet, not CSV: 45 MB against 586 MB, which is the
+# difference between a normal git file and one GitHub refuses outright. Everyone then
+# models identical bytes rather than trusting that each rerun produced the same file.
+CLEAN_PARQUET = DATA_PROCESSED / "clean.parquet"
+
 # Confirmed target (see docs/target_definition.md). Everything downstream reads these.
 TARGET_COLUMN: str = "CCME_Values"
 TARGET_KIND: str = "regression"  # "regression" or "classification"

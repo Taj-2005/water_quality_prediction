@@ -63,9 +63,15 @@ incompatible water quality standards.
   [docs/data_dictionary.md](docs/data_dictionary.md).
 - **Raw data is never edited in place.** `data/raw/Combined_dataset.csv` (305 MiB) is
   tracked with **Git LFS**, so `git lfs install` is required before cloning or you will
-  receive a pointer file instead of the data. Everything else under `data/` —
-  `processed/` and `splits/` — stays git-ignored and is regenerated locally; see
-  [Reproducing results](#6-reproducing-results).
+  receive a pointer file instead of the data.
+- **The cleaned table is committed** as `data/processed/clean.parquet` (45 MB, plain
+  git, no LFS), so every member models identical bytes rather than relying on each
+  person's rerun. It loads in 0.3 s against the CSV's 8.5 s and preserves the category
+  and boolean dtypes a CSV round trip loses.
+- **`clean.csv` is not committed** — 559 MiB exceeds GitHub's 100 MB plain-git limit,
+  and via LFS it would consume most of the free 1 GiB quota. Generate it locally when
+  you need it: see [Generating `clean.csv`](#generating-cleancsv). `data/splits/` is
+  likewise git-ignored and regenerated.
 
 ### Data handling rules
 
@@ -127,7 +133,7 @@ time period, so the model's behaviour is explainable in the viva and not just sc
 water_quality_prediction/
 ├── data/
 │   ├── raw/                     # original dataset, never edited (git-ignored)
-│   ├── processed/               # clean.csv, output of src/clean.py (git-ignored)
+│   ├── processed/               # clean.parquet (committed); clean.csv generated locally
 │   └── splits/                  # saved train/val/test indices (git-ignored)
 ├── notebooks/
 │   ├── 01_cleaning.ipynb        # cleaning decisions, each with its reason
@@ -200,9 +206,13 @@ Then place the raw dataset in `data/raw/` under the filename recorded in
 
 Run in this order — each step depends on the previous one.
 
+`data/processed/clean.parquet` is **committed**, so a fresh clone can skip step 1 and go
+straight to modelling. Regenerate it only when the cleaning logic changes.
+
 ```bash
 # 1. raw -> cleaned, documented table (no imputation here)
-python -m src.clean
+#    see "Generating clean.csv" below if you need the CSV as well
+python -m src.clean --no-csv
 
 # 2. create the shared split once; writes indices to data/splits/
 python -m src.split
@@ -211,6 +221,38 @@ python -m src.split
 python -m src.models_rf        # -> reports/rf_results.csv
 python -m src.models_xgb       # -> reports/xgb_results.csv
 ```
+
+### Generating `clean.csv`
+
+`clean.csv` is **git-ignored and never committed** — at 559 MiB it exceeds GitHub's
+100 MB plain-git limit, and tracking it in LFS would consume most of the free 1 GiB
+quota, blocking pushes for the whole team after a single regeneration.
+
+Most work does not need it: `load_data()` reads the committed `clean.parquet`, which
+holds the identical 2,818,006 × 30 table. Generate the CSV only if you specifically need
+a plain-text copy — to open it in Excel, to diff it, or to hand it to a tool that cannot
+read parquet.
+
+```bash
+# both formats: clean.parquet (45 MB) and clean.csv (559 MiB)
+python -m src.clean
+
+# parquet only - the default for everyday work
+python -m src.clean --no-csv
+```
+
+The pipeline is deterministic — a fixed cleaning rule set and no sampling — so every
+member's regenerated file is byte-identical. Measured on the full 2,827,977 rows: about
+**32 seconds** and **1.4 GiB** of peak memory for both formats.
+
+| Command | Writes | Committed |
+| :--- | :--- | :--- |
+| `python -m src.clean` | `clean.parquet` + `clean.csv` | parquet only |
+| `python -m src.clean --no-csv` | `clean.parquet` | yes |
+| `python -m src.clean --profile` | nothing — prints the figures behind [docs/data_dictionary.md](docs/data_dictionary.md) | — |
+
+**Never run `git add data/processed/clean.csv`.** The `.gitignore` prevents it by
+default; forcing it past that is what would exhaust the LFS quota.
 
 Then run the notebooks in numeric order for the EDA, baseline, evaluation table and SHAP
 analysis. The random seed is fixed in one place and used everywhere, so a clean run

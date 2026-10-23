@@ -13,8 +13,13 @@ units are already consistent per column, and no detection-limit values exist in 
 measurement column (the "<" characters in the file are all inside Area site names).
 Both are documented in docs/data_dictionary.md rather than silently skipped.
 
+Writes two files. ``clean.parquet`` (45 MB) is the shared artifact and is committed, so
+every member models identical bytes. ``clean.csv`` (586 MB) is a local convenience and
+stays git-ignored - GitHub refuses any file above 100 MB.
+
 Run:
-    python -m src.clean              # write data/processed/clean.csv
+    python -m src.clean              # write clean.parquet and clean.csv
+    python -m src.clean --no-csv     # parquet only
     python -m src.clean --profile    # print the profile behind the data dictionary
 """
 
@@ -26,7 +31,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from src.config import CLEAN_CSV, DATA_PROCESSED, RAW_CSV
+from src.config import CLEAN_CSV, CLEAN_PARQUET, DATA_PROCESSED, RAW_CSV
 
 # Column names are kept verbatim. src/config.py binds TARGET_COLUMN = "CCME_Values",
 # so renaming columns here would break Parth's interface and every downstream module.
@@ -254,7 +259,9 @@ def profile(df: pd.DataFrame) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--profile", action="store_true",
-                    help="print the dataset profile instead of writing clean.csv")
+                    help="print the dataset profile instead of writing the output")
+    ap.add_argument("--no-csv", action="store_true",
+                    help="write only clean.parquet, skip the 586 MB CSV")
     args = ap.parse_args()
 
     df = clean()
@@ -263,9 +270,21 @@ def main() -> None:
         return
 
     DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
-    df.to_csv(CLEAN_CSV, index=False)
-    print(f"\nwrote {CLEAN_CSV.relative_to(CLEAN_CSV.parents[2])} "
-          f"({CLEAN_CSV.stat().st_size / 1e6:.0f} MB)")
+
+    # Parquet is the shared artifact: it is committed, so every member models identical
+    # bytes instead of trusting that each rerun produced the same file. Categories are
+    # restored first so the dtypes survive the round trip.
+    for col in CATEGORICALS + ["Area"]:
+        df[col] = df[col].astype("category")
+    df.to_parquet(CLEAN_PARQUET, compression="zstd", index=False)
+    print(f"\nwrote {CLEAN_PARQUET.name}  "
+          f"({CLEAN_PARQUET.stat().st_size / 1e6:.0f} MB, committed)")
+
+    if not args.no_csv:
+        df.to_csv(CLEAN_CSV, index=False)
+        print(f"wrote {CLEAN_CSV.name}  "
+              f"({CLEAN_CSV.stat().st_size / 1e6:.0f} MB, git-ignored)")
+    print(f"{len(df):,} rows x {df.shape[1]} columns")
 
 
 if __name__ == "__main__":
