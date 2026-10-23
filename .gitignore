@@ -1,10 +1,11 @@
-# Data — never committed; see README section 5 for how to place the raw dataset
+# Data — raw dataset tracked via Git LFS; processed and splits remain uncommitted
 data/raw/*
 data/processed/*
 data/splits/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/splits/.gitkeep
+!data/raw/Combined_dataset.csv
 
 # Trained models
 models/

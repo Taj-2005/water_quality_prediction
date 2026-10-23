@@ -1,7 +1,6 @@
 # Water Quality Prediction
 
-Predicting a documented water quality target from physical and chemical measurements
-(pH, dissolved oxygen, turbidity, temperature, conductivity, dissolved solids), and
+Predicting a documented water quality target from physical and chemical measurements, and
 comparing interpretable tree ensembles against a neural model on an identical,
 leakage-safe split.
 
@@ -14,12 +13,32 @@ leakage-safe split.
 
 ---
 
+## Current Status
+
+The initial shared foundation (Phase 1, Stage 1) is **complete** (Parth):
+- **Target Confirmed**: `CCME_Values`
+- **Problem Type**: **Regression**
+- **Target Documentation & Leakage Analysis**: Documented in [docs/target_definition.md](docs/target_definition.md)
+- **Shared Evaluation API**: Established in [src/evaluate_api.py](src/evaluate_api.py)
+- **Configuration**: Configured in [src/config.py](src/config.py)
+
+**Pending next steps:**
+- **Taj** → data cleaning (`src/clean.py`, `notebooks/01_cleaning.ipynb`, `data/processed/clean.csv`) and EDA (`notebooks/02_eda.ipynb`, `docs/data_dictionary.md`)
+- **Parth** → shared split (`src/split.py`) and preprocessing pipeline (`src/preprocess.py`) once cleaned data is available
+- **Himanshu** → literature review (`refs.bib`), feature engineering (`src/features.py`), and Random Forest (`src/models_rf.py`, `04_random_forest.ipynb`)
+- **Jivit** → XGBoost model training, tuning, and ablation (`src/models_xgb.py`, `05_xgboost.ipynb`)
+- **Satya** → metric implementations (`src/metrics.py`), naive baseline (`03_naive_baseline.ipynb`), LaTeX report & presentation deck
+
+---
+
 ## 1. Problem statement
 
-Predict a **single, documented** water quality class or index from routine sensor and
+Predict the continuous water quality index (`CCME_Values`) from routine sensor and
 lab measurements. The team commits to **one** target definition and does not mix
 incompatible water quality standards.
 
+- **Target Column:** `CCME_Values` (see [docs/target_definition.md](docs/target_definition.md))
+- **Problem Type:** **Regression** (continuous CCME Water Quality Index ranging from 31.304 to 100.0)
 - **Gap being addressed:** tree models are strong on tabular data but may not capture
   smooth multi-sensor interactions or produce calibrated uncertainty as efficiently.
   Phase 2 tests whether a regularized MLP closes that gap on the same split.
@@ -29,25 +48,17 @@ incompatible water quality standards.
 
 ### Target definition and leakage
 
-> The target is defined in [docs/target_definition.md](docs/target_definition.md).
-> **This must be settled and written down before any modelling.**
+> Full analysis and mathematical formula in [docs/target_definition.md](docs/target_definition.md).
 
-If the target is an **index computed from the input columns** (e.g. a WQI derived from
-pH, DO and turbidity), then regressing it on those same columns is **target leakage**.
-The allowed resolutions are:
-
-1. drop the contributing input columns, or
-2. choose a different target,
-
-and whichever is chosen is stated explicitly in the report.
+- **`CCME_WQI`** is excluded as direct label leakage (post-hoc categorical binning of the target).
+- **The 8 chemical parameters** contributing directly to the CCME calculation formula are documented for pipeline handling and ablation.
 
 ---
 
 ## 2. Dataset
 
-- **Source:** the dataset provided in the project PDF (finalised). Starter options named
-  by the brief: UCI water quality data matching the selected target, or a documented
-  national surface-water monitoring subset with a clear WQI definition (CCME WQI).
+- **Source:** Harmonized global surface-water monitoring dataset with CCME Water Quality Index values across 5 countries (England, USA, Ireland, China, Canada), totaling 2,827,977 rows × 14 columns.
+- **Location:** `data/raw/Combined_dataset.csv`
 - **Documentation:** every column — unit, meaning, source, license — is recorded in
   [docs/data_dictionary.md](docs/data_dictionary.md).
 - **Raw data is never edited in place and never committed.** `data/` is git-ignored
