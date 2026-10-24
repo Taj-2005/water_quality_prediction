@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **GitHub** | [@14-himanshu](https://github.com/14-himanshu) |
 | **Role** | Literature review, feature engineering, Random Forest |
-| **Branch prefix** | `feat/himanshu-*` (working branch: `feat/himanshu-lit-review`) |
+| **Branch prefix** | `himanshu` |
 | **Theory note for the report** | Random Forest: bagging, variance reduction, out-of-bag error |
 
 One page, maintained by Himanshu Pandey. Examiners read this alongside the commit history to
@@ -27,7 +27,7 @@ see individual contribution, so write it as you go rather than at the end.
 
 2. **Phase 1 Upstream Audit & Synchronization**:
    - Reconciled repository metadata following the merge of Taj's PR #4 and PR #5 into `main`, confirming `data/processed/clean.parquet` (45.3 MB), `pyarrow>=14.0`, and Figshare DOI `10.6084/m9.figshare.27800394`.
-   - Merged `main` cleanly into `feat/himanshu-lit-review`.
+   - Merged `main` cleanly into `himanshu`.
 
 ## Why I built it that way
 
