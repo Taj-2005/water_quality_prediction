@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
@@ -127,35 +127,42 @@ def load_data(path: Path | str | None = None) -> pd.DataFrame:
 
 def get_splits(
     splits_dir: Path | str | None = None,
-) -> tuple[Any, Any, Any, Any, Any, Any]:
+    include_metadata: bool = True,
+    include_imputation_flags: bool = False,
+    scale_numeric: bool = False,
+    partial_scenario: str | Sequence[str] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
     """Return the shared, seeded train/validation/test split.
 
-    The actual split implementation will be completed by Parth in ``src/split.py``
-    after the cleaned dataset (``data/processed/clean.csv``) is available.
+    Uses Area-based site grouping to guarantee zero spatial leakage across partitions.
+    Preprocessing is fitted strictly on the training partition.
+
+    Parameters
+    ----------
+    splits_dir : Path | str | None, optional
+        Custom directory containing splits.parquet. Defaults to data/splits/.
+    include_metadata : bool, default True
+        Whether to include non-chemical metadata covariates (Country, Waterbody Type).
+    include_imputation_flags : bool, default False
+        Whether to include upstream imputation indicator flags (reserved for Jivit's ablation).
+    scale_numeric : bool, default False
+        Whether to z-score normalize numeric measurements using train statistics.
+    partial_scenario : str | Sequence[str] | None, optional
+        Partial measurement scenario ('8/8', '7/8', '6/8', '4/8' or custom measurement list).
 
     Returns
     -------
     tuple
         ``(X_train, X_val, X_test, y_train, y_val, y_test)``
-
-    Notes
-    -----
-    - Split will be performed by site/station ('Area') or time ('Date') if
-      metadata permits, otherwise a seeded random split using ``src.config.SEED``.
-    - Preprocessing (imputation, scaling, encoding) will be fitted on
-      training data only to guarantee zero data leakage.
-    - Split indices will be persisted under ``data/splits/`` to guarantee byte-identical
-      inputs for Random Forest (Himanshu), XGBoost (Jivit), and Naive Baseline (Satya).
-    - The test set must be touched exactly once during final evaluation.
-
-    Raises
-    ------
-    NotImplementedError
-        Raised until Parth implements ``src/split.py`` after Taj's clean data lands.
     """
-    raise NotImplementedError(
-        "Shared splits are not yet generated. Parth will implement src/split.py "
-        "and persist indices to data/splits/ once Taj's clean dataset is merged."
+    from src.preprocess import get_preprocessed_splits
+
+    return get_preprocessed_splits(
+        splits_dir=splits_dir,
+        include_metadata=include_metadata,
+        include_imputation_flags=include_imputation_flags,
+        scale_numeric=scale_numeric,
+        partial_scenario=partial_scenario,
     )
 
 
