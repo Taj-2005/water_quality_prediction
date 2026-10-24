@@ -10,8 +10,9 @@ All figures below were measured on the full raw file (not a sample) with
 | Field | Value |
 | :--- | :--- |
 | Dataset name | Combined harmonized surface-water quality dataset with CCME WQI |
-| Provider / link | _TBD — pending from Parth. His analysis cites the upstream notebooks `Data_Processing_Harmonization.ipynb` and `Technical_Validation.ipynb`; we need the publication, DOI or repository URL for the report citation._ |
-| License and terms of use | _TBD — pending from Parth (same source)._ |
+| Provider / link | Figshare — DOI [10.6084/m9.figshare.27800394](https://doi.org/10.6084/m9.figshare.27800394) |
+| License and terms of use | **CC BY 4.0** — reuse permitted with attribution. The IEEE report must cite the DOI above |
+| Upstream processing | Harmonization and CCME computation were performed by the dataset authors in `Data_Processing_Harmonization.ipynb`; benchmark models in `Technical_Validation.ipynb`. We did not run either — see [Upstream imputation](#upstream-imputation) for what that cost us |
 | File placed at | `data/raw/Combined_dataset.csv` (305 MiB, tracked with Git LFS) |
 | Rows × columns | 2,827,977 × 14 |
 | Date coverage | 2 January 1940 → 17 December 2023 |
