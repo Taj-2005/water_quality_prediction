@@ -21,11 +21,11 @@ Because individual water samples often satisfy standards for some analytes while
 ### 1.2 Genesis and Structure of Water Quality Indices
 To transform multidimensional water analyses into actionable metrics, composite **Water Quality Indices (WQIs)** were formulated, originating with Horton (1965) and formalized by Brown et al. (1970) for the National Sanitation Foundation (NSF WQI). A WQI aggregates disparate physical and chemical measurements into a single, dimensionless score (typically on a $0	ext{--}100$ scale). Subsequent global adaptations include the Oregon WQI, the British Columbia WQI, weighted arithmetic WQIs, and the Canadian Council of Ministers of the Environment Water Quality Index (CCME WQI) (Lumb et al., 2011).
 
-Classical index formulations historically suffer from two aggregation pitfalls:
-- **Eclipsing:** An aggregated index registers an acceptable score despite a single critical toxicant violating lethal environmental thresholds.
-- **Ambiguity:** Divergent constituent combinations yield identical composite scores.
+Classical index formulations historically suffer from structural aggregation pitfalls:
+- **Eclipsing:** An aggregated index registers an acceptable score despite a single critical toxicant violating lethal environmental thresholds (Abbasi & Abbasi, 2012).
+- **Ambiguity:** Divergent constituent combinations yield identical composite scores (Lumb et al., 2011).
 
-### 1.3 The CCME Water Quality Index Methodology: Standard vs. Row-Level Formulation
+### 1.3 The CCME Water Quality Index Methodology: Standard Protocol vs. Row-Level Formulation
 The CCME WQI methodology (CCME, 2001) is designed to evaluate guideline non-compliance across three orthogonal geometric dimensions:
 
 1. **Scope ($F_1$):** Percentage of water quality variables failing to meet guidelines at least once during the sampling window relative to the total number of variables evaluated:
@@ -51,8 +51,8 @@ This maps to five categorical quality bands: **Excellent (95–100)**, **Good (8
 
 #### Critical Distinction: Official Protocol vs. Dataset-Specific Row-Level Calculation
 An essential distinction must be maintained between official regulatory methodology and dataset-specific calculation:
-- **Official CCME Protocol (CCME, 2001):** The official standard explicitly mandates a temporal aggregation window requiring **at least four variables sampled on at least four separate monitoring events** (minimum 16 analytical tests). The CCME index is conceptually designed to assess a river reach or lake over a season or year, capturing temporal failure frequency ($F_2$).
-- **Dataset-Specific Row-Level Adaptation:** In the project's harmonized surface-water monitoring table, the CCME WQI appears to be computed on a per-row, instantaneous basis ($N=1$ per timestamp). When computed on a single measurement event across $P$ variables, the total number of tests equals $P$, and the number of failed tests equals the number of failed variables ($k$). Consequently, **Frequency ($F_2$) collapses algebraically to Scope ($F_1$)**, leaving only two independent factors ($F_1$ and $F_3$). While this adaptation allows continuous tabular regression on individual sampling rows, it represents an empirical modification rather than the standard multi-period CCME protocol.
+- **Official CCME Protocol (CCME, 2001):** The official standard explicitly mandates an aggregative temporal monitoring window requiring **at least four variables sampled on at least four separate monitoring events** (minimum 16 analytical tests). The CCME index is conceptually designed to assess a river reach or lake over a season or year, capturing temporal failure frequency ($F_2$).
+- **Dataset-Specific Row-Level Adaptation:** In the project's harmonized surface-water monitoring dataset (Figshare DOI: 10.6084/m9.figshare.27800394), the CCME WQI is reported on a per-row, instantaneous basis ($N=1$ per timestamp). When computed on a single measurement event across $P$ variables, the total number of tests equals $P$, and the number of failed tests equals the number of failed variables ($k$). Consequently, **Frequency ($F_2$) collapses algebraically to Scope ($F_1$)**, leaving only two independent factors ($F_1$ and $F_3$). While this adaptation allows continuous tabular regression on individual sampling rows, it represents an empirical modification rather than the standard multi-period CCME protocol.
 - **Provisional Status:** Whether this dataset strictly followed this exact single-row CCME algebraic implementation is documented in `docs/target_definition.md` (citing upstream notebook `Data_Processing_Harmonization.ipynb`), but remains **provisional** until the source harmonization scripts and raw 305 MB CSV can be executed and verified locally.
 
 ### 1.4 Index Calculation vs. Predictive Modeling
@@ -63,7 +63,7 @@ An essential distinction must be maintained between official regulatory methodol
   3. Spatial interpolation across ungauged river catchments.
   4. Constructing rapid computational emulators of complex numerical simulations.
 
-When a model is trained using the exact 8 chemical parameters that define the CCME formula to predict `CCME_Values`, it acts as a **function emulator of an algebraic equation**, not a physical environmental predictor. Acknowledging this distinction is critical to prevent conflating formula fitting with environmental generalization.
+When a model is trained using the exact 8 chemical/physical parameters that define the CCME formula to predict `CCME_Values`, it acts as a **function emulator of an algebraic equation**, not a physical environmental predictor. Acknowledging this distinction is critical to prevent conflating formula fitting with environmental generalization.
 
 ---
 
@@ -72,7 +72,7 @@ When a model is trained using the exact 8 chemical parameters that define the CC
 ### 2.1 Scope of Supervised Learning in Water Resources
 Supervised machine learning captures high-dimensional, non-linear hydrochemical interactions that conventional linear models and physical hydrodynamic equations struggle to scale across large watersheds (Ahmed et al., 2019; Tyralis et al., 2019). Modeling objectives are divided into:
 1. **Constituent Prediction:** Predicting unmeasured or delayed parameters from sensor surrogates.
-2. **Index Prediction:** Directly modeling composite indices (e.g., CCME WQI) to provide automated watershed health scoring (Bui et al., 2020; Aldhyani et al., 2020).
+2. **Index Prediction:** Directly modeling composite indices (e.g., WQI) to provide automated watershed health scoring (Bui et al., 2020).
 
 ### 2.2 Regression vs. Classification Objectives
 
@@ -83,10 +83,10 @@ Supervised machine learning captures high-dimensional, non-linear hydrochemical 
 | **Class Imbalance** | Handled naturally as continuous target skewness (MSE, MAE, Huber loss). | Severe minority class penalty; Poor water quality typically comprises $<5\%$ of monitoring records. |
 | **Primary Metrics** | MAE, RMSE, Mean Absolute Percentage Error (MAPE), Coefficient of Determination ($R^2$). | Macro F1-score, Balanced Accuracy, Cohen's Kappa, ROC-AUC, Brier score / calibration curves. |
 
-While discretizing indices into qualitative classes can artificially simplify prediction, it introduces label noise at class boundaries and discards critical physical variance (Aldhyani et al., 2020). In accordance with the project baseline, `CCME_Values` is formulated strictly as a continuous regression task. In Phase 2, this continuous formulation will provide the baseline for deep neural network architectures (MLPs) as explored in tabular deep learning literature (Goodfellow et al., 2016).
+Discretizing intrinsically continuous water quality indices into qualitative classes discards variance near regulatory transition thresholds. In accordance with the project baseline, `CCME_Values` is formulated strictly as a continuous regression task. In Phase 2, this continuous formulation will provide the foundation for deep neural network architectures (MLPs) as explored in tabular deep learning literature (Goodfellow et al., 2016).
 
 ### 2.3 Environmental Data Challenges: Missingness, Spatial Variability, and Non-Stationarity
-- **Missing Data and Upstream Imputation:** Sensors frequently experience biofouling, battery drain, and intermittent laboratory testing schedules. In real datasets, missingness rarely follows Missing Completely at Random (MCAR). A pervasive flaw in published studies is applying global mean or median imputation across the full dataset prior to splitting, which leaks test set statistics into training sets (Kaufman et al., 2012).
+- **Missing Data and Upstream Imputation:** Sensors frequently experience biofouling, battery drain, and intermittent laboratory testing schedules. In real datasets, missingness rarely follows Missing Completely at Random (MCAR). Applying global mean or median imputation across the full dataset prior to splitting leaks test set statistics into training sets (Kaufman et al., 2012).
 - **Spatial Autocorrelation:** Stations nested within river networks share unmeasured catchment, soil, and upstream discharge covariates. Standard random row-level train/test splits result in spatial leakage, where models memorize station identities rather than generalizable chemical relationships (Roberts et al., 2017).
 - **Temporal Non-Stationarity:** Hydrological time series exhibit strong seasonality (e.g., temperature-dependent oxygen saturation) and multi-decadal shifts from land-use changes, meaning historical patterns may not represent contemporary aquatic conditions.
 
@@ -114,10 +114,9 @@ Standard bagging reduces the second term $rac{1-ho}{B}\sigma^2$, but cannot re
   - *Mean Decrease in Accuracy (MDA / Permutation Importance):* Measures the drop in OOB accuracy when values of feature $j$ are randomly shuffled across OOB samples, breaking its true relationship with the target. MDA provides an unbiased metric of true predictive value.
 
 ### 3.3 Empirical Studies in Water Resources
-- **Ahmed et al. (2019)** investigated machine learning methods for water quality constituent prediction in the Johor River Basin, Malaysia. They demonstrated that incorporating wavelet denoising with neuro-fuzzy systems (WDT-ANFIS) improved prediction of noisy dissolved oxygen and biochemical parameters compared to standard multi-layer perceptrons, underscoring the necessity of handling high-frequency measurement noise in environmental sensors.
-- **Bui et al. (2020)** evaluated decision tree algorithms (RF, M5P, Random Tree, REPTree) combined with ensemble resampling techniques (Bagging, Cross-Validation Parameter Selection, and Randomizable Filtered Classification) for predicting the Iran Water Quality Index ($	ext{IRWQI}_{sc}$) in the Talar catchment, Iran. Their results showed that bagging ensembles paired with tree models achieved the highest stability and accuracy ($R^2 > 0.91$), substantially mitigating local variance across multi-year hydrological cycles.
-- **Aldhyani et al. (2020)** investigated AI algorithms for water quality monitoring across Indian river networks, contrasting continuous Water Quality Index (WQI) regression via neural network architectures (NARNET and LSTM) against discrete classification via Support Vector Machines (SVM), K-Nearest Neighbors, and Naive Bayes. Their findings confirmed that continuous regression provides superior resolution for pollution gradients, whereas classification masks subtle guideline transgressions near class boundaries.
-- **Tyralis et al. (2019)** conducted a comprehensive review of Random Forests in hydrology and water resources, analyzing over 200 studies. They concluded that Random Forest is favored across hydrological applications due to its resilience against overfitting, its ability to model non-linear interactions without extensive hyperparameter tuning, and its native computation of out-of-bag validation error.
+- **Ahmed et al. (2019)** investigated machine learning methods for water quality constituent prediction in the Johor River Basin, Malaysia. They evaluated Multi-Layer Perceptrons (MLP), Radial Basis Function (RBF) networks, and Adaptive Neuro-Fuzzy Inference Systems (ANFIS). Their findings demonstrated that integrating a wavelet de-noising technique with ANFIS (WDT-ANFIS) improved the modeling of non-linear hydrological series by filtering high-frequency measurement noise prior to inference.
+- **Bui et al. (2020)** evaluated four tree-based algorithms (Random Forest, M5P, Random Tree, and Reduced Error Pruning Tree) combined with three meta-learning ensemble frameworks (Bagging, Cross-Validation Parameter Selection, and Randomizable Filtered Classification) for predicting the Iran Water Quality Index ($	ext{IRWQI}_{sc}$) in the Talar catchment, Iran. The authors reported that the hybrid **Bagging-Random Tree (BA-RT)** model achieved the highest predictive accuracy among the evaluated configurations ($R^2 = 0.941$, $	ext{RMSE} = 2.71$), demonstrating that bagging ensembles effectively reduce prediction variance across multi-year hydrological data.
+- **Tyralis et al. (2019)** conducted a comprehensive review of Random Forests in hydrology and water resources, synthesizing findings across over 200 studies. They concluded that Random Forest is widely favored across water science due to its low parameter-tuning burden, resistance to overfitting when tree count grows large, and intrinsic out-of-bag validation capabilities.
 
 ---
 
@@ -141,7 +140,7 @@ Chen and Guestrin (2016) introduced XGBoost, addressing computational bottleneck
 
 ### 4.3 Controlled Comparisons: Random Forest vs. XGBoost
 - **Bias-Variance Profile:** Random Forest is primarily a variance-reduction technique that rarely overfits as tree count grows, making it robust to default hyperparameters. XGBoost is a bias-reduction technique capable of capturing higher-order interactions, but can overfit if hyperparameters ($\eta$, max depth, subsample, $\gamma$) are improperly tuned.
-- **Controlled Benchmarking Necessity:** In environmental literature, claims of boosting superiority often stem from unequal experimental conditions (e.g., extensive hyperparameter search on XGBoost vs. default settings on RF, or mismatched train/val splits). Valid comparison requires:
+- **Controlled Benchmarking Necessity:** In environmental literature, comparative claims between tree ensembles are often confounded by unequal experimental conditions (e.g., extensive hyperparameter search on boosting versus default settings on bagging, or inconsistent train/validation partitions). Valid comparison requires:
   1. Identical, immutable cross-validation split indices.
   2. Unified preprocessing and missingness pipelines.
   3. Equivalent hyperparameter search budgets.
@@ -152,34 +151,34 @@ Chen and Guestrin (2016) introduced XGBoost, addressing computational bottleneck
 ## 5. Feature Engineering and Data Leakage
 
 ### 5.1 Hydrochemical Domain Feature Engineering and Schema Verification
-Feature engineering must be grounded in physical chemistry while adhering strictly to the columns present in the project's 14-column dataset (`Combined_dataset.csv`).
+Feature engineering proposals must be evaluated against the actual columns in the project's 14-column dataset (`Combined_dataset.csv`, Figshare DOI: 10.6084/m9.figshare.27800394).
 
 #### Verification of Available Dataset Columns:
-The schema consists of:
+The documented schema consists of:
 - **Metadata & Spatiotemporal:** `Country`, `Area`, `Waterbody Type`, `Date`
 - **Contributing Chemical/Physical Inputs (8 Ireland Standard Variables):** `Ammonia (mg/l)`, `Biochemical Oxygen Demand (mg/l)`, `Dissolved Oxygen (mg/l)`, `Orthophosphate (mg/l)`, `pH (ph units)`, `Temperature (cel)`, `Nitrogen (mg/l)`, `Nitrate (mg/l)`
 - **Target and Derived Label:** `CCME_Values` (target), `CCME_WQI` (post-hoc categorical binning)
 
-*(Note: Chemical Oxygen Demand (COD) is absent from the dataset; previously proposed $BOD:COD$ ratios are scientifically invalid for this project and have been removed).*
+*(Note: Chemical Oxygen Demand (COD) is absent from the dataset schema. The previously proposed $BOD:COD$ ratio is unfeasible and has been excluded).*
 
-#### Feasible Chemical Features and Numerical Safeguards:
-1. **Nutrient Stoichiometric Ratio ($N:P$ Ratio):**
-   - *Formula:* $[	ext{Nitrogen}] / ([	ext{Orthophosphate}] + \epsilon)$
-   - *Scientific Rationale:* Reflects nutrient limitation (nitrogen- vs. phosphorus-limited algal growth).
-   - *Numerical Safeguard:* In raw data, `Orthophosphate (mg/l)` has values at or near zero (min $-0.004$, 10 negative readings). An explicit smoothing parameter $\epsilon = 0.001	ext{ mg/l}$ must be added to the denominator, and negative values clipped to zero before division ($\max(0, 	ext{Orthophosphate}) + \epsilon$).
-2. **Inorganic Nitrogen Speciation Ratio:**
-   - *Formula:* $[	ext{Ammonia}] / ([	ext{Nitrate}] + \epsilon)$
-   - *Scientific Rationale:* Captures the balance between reduced (ammoniacal) and oxidized (nitrate) nitrogen, serving as an indicator of dissolved oxygen depletion and microbial nitrification efficiency.
-   - *Numerical Safeguard:* `Nitrate (mg/l)` has an empirical minimum of $0.000$; requires $\epsilon = 0.001	ext{ mg/l}$ in denominator.
-3. **Organic Nitrogen Approximation:**
-   - *Formula:* $[	ext{Nitrogen}] - ([	ext{Nitrate}] + [	ext{Ammonia}])$
-   - *Scientific Rationale:* Approximates organically bound nitrogen from total and inorganic fractions. All three columns share identical units ($	ext{mg/l}$).
-   - *Numerical Safeguard:* Because measurements are derived from separate sensor assays, measurement error can produce negative estimates; values must be flagged or clipped at zero.
+#### Candidate Chemical Features and Numerical Safeguards:
+1. **Candidate Nutrient Stoichiometric Ratio ($N:P$ Ratio):**
+   - *Candidate Formula:* $[	ext{Nitrogen}] / ([	ext{Orthophosphate}] + \epsilon)$
+   - *Scientific Interpretation:* Proposes to capture relative nutrient limitation (nitrogen- vs. phosphorus-limited algal biomass).
+   - *Data Validation & Caveats:* In the raw dataset, `Orthophosphate (mg/l)` contains values at or near zero (minimum $-0.004$, 10 negative readings). An arithmetic smoothing term $\epsilon = 0.001	ext{ mg/l}$ prevents division-by-zero, but **smoothing alone does not guarantee scientific validity**. Clipping negative values ($\max(0, x)$) changes the statistical distribution of instrument sensor noise near detection limits; such adjustments require explicit validation against data provenance.
+2. **Candidate Inorganic Nitrogen Speciation Ratio:**
+   - *Candidate Formula:* $[	ext{Ammonia}] / ([	ext{Nitrate}] + \epsilon)$
+   - *Scientific Interpretation:* Evaluates the proportion of reduced (ammonia) to oxidized (nitrate) nitrogen, reflecting nitrification and oxygen consumption.
+   - *Data Validation & Caveats:* `Nitrate (mg/l)` reaches $0.000$; requires denominator smoothing and handling of near-zero values.
+3. **Candidate Organic Nitrogen Fraction:**
+   - *Candidate Formula:* $[	ext{Nitrogen}] - ([	ext{Nitrate}] + [	ext{Ammonia}])$
+   - *Scientific Interpretation:* Attempts to approximate the organic nitrogen fraction by subtracting inorganic forms from total nitrogen.
+   - *Data Validation & Caveats:* While units are consistent ($	ext{mg/l}$), independent laboratory assay errors can cause the sum of inorganic components to exceed total nitrogen, producing negative values. Truncating or clipping these values alters sensor error structures and must be validated empirically during feature selection.
 4. **Non-Linear Skewness Transformations:**
-   - *Evidence from EDA:* `Ammonia (mg/l)` exhibits extreme skewness of $11.98$ (kurtosis $221.7$), and `Biochemical Oxygen Demand (mg/l)` exhibits skewness of $10.21$.
-   - *Transform:* $\log(1 + \max(0, x))$. Clipping at zero is necessary because raw sensor data contains isolated negative readings (e.g., BOD min $-2.0$), which would otherwise produce `NaN` values under $\log(1+x)$.
+   - *Evidence from EDA:* `Ammonia (mg/l)` exhibits skewness of $11.98$ (kurtosis $221.7$), and `Biochemical Oxygen Demand (mg/l)` exhibits skewness of $10.21$.
+   - *Transform:* $\log(1 + \max(0, x))$. Truncating at zero is computationally necessary to prevent `NaN` values under $\log(1+x)$ caused by isolated negative sensor records.
 5. **Spatiotemporal Features:**
-   - *Cyclic Date Encoding:* Transforming `Date` into $\sin(2\pi \cdot 	ext{day}/365)$ and $\cos(2\pi \cdot 	ext{day}/365)$ captures seasonal hydrological cycles.
+   - *Cyclic Date Encoding:* Transforming `Date` into $\sin(2\pi \cdot 	ext{day}/365)$ and $\cos(2\pi \cdot 	ext{day}/365)$ models seasonal hydrological cycles.
    - *Station Aggregations:* Per-site historical averages (`Area`) must be computed **strictly on training observations** to prevent data leakage.
 
 ### 5.2 Taxonomy of Data Leakage
@@ -207,49 +206,53 @@ The schema consists of:
 
 - **Direct Label Leakage:** Feeding variables that are direct post-hoc transformations of the target (e.g., passing `CCME_WQI` into $X$, exposing target intervals).
 - **Target Formula Inversion Leakage:** Feeding the exact 8 chemical/physical parameters that calculate `CCME_Values`.
-  - *Temperature Clarification:* `Temperature (cel)` **is an active contributing input** to the Ireland CCME formula (threshold = 25.0 °C). It cannot be classified as a non-contributing feature.
-  - *Non-contributing features* are restricted strictly to metadata and spatiotemporal features (`Country`, `Area`, `Waterbody Type`, `Date`).
+  - *Temperature Verification:* `Temperature (cel)` **is an active contributing input** to the Ireland CCME formula (threshold = 25.0 °C) as documented in `docs/target_definition.md`. It cannot be classified as a non-contributing feature.
+  - *Non-contributing features* are restricted strictly to metadata and spatiotemporal covariates (`Country`, `Area`, `Waterbody Type`, `Date`).
 - **Preprocessing Leakage:** Computing summary statistics (medians, scalers) over combined train and test sets (Kaufman et al., 2012). Preprocessing must be fitted strictly on $X_{train}$.
 - **Spatiotemporal Validation Leakage:** Random cross-validation on autocorrelated time-series or station records, causing models to interpolate known local readings rather than generalizing (Roberts et al., 2017).
 
 ---
 
-## 6. Research Gap and Project Motivation
+## 6. Research Gap and Proposed Project Framework
 
-### 6.1 Critical Synthesis of Limitations in Published Studies
-A systematic review of current water quality prediction literature reveals four recurring methodological shortcomings:
-1. **Unacknowledged Target Formula Inversion:** Authors routinely train models on contributing index chemicals, reporting near-perfect accuracy ($R^2 > 0.95$) without disclosing that the model is functioning purely as an emulator of a closed-form formula (Bui et al., 2020; Aldhyani et al., 2020).
-2. **Preprocessing Contamination:** Applying global median or mean imputation across entire datasets prior to cross-validation, obscuring genuine sensor missingness patterns (Kaufman et al., 2012).
-3. **Unfair and Uncontrolled Benchmarks:** Comparing algorithms across differing splits, unequal tuning budgets, or ad-hoc data loaders (Tyralis et al., 2019).
-4. **Ignoring Target Ceiling Censoring:** Environmental indices frequently exhibit strong ceiling effects. In the global CCME dataset, **$35.92\%$ of all samples sit exactly at the ceiling value of $100.0$**. Standard regression models evaluated purely on aggregate RMSE or $R^2$ hide significant boundary distortions, failing to report stratified performance between at-ceiling and below-ceiling observations.
+### 6.1 Critical Synthesis of Limitations and Methodological Risks
+The literature on machine learning for water quality assessment reveals three distinct categories of methodological concerns:
 
-### 6.2 Project Methodology and Phase 1 Architecture
-Our Phase 1 design explicitly resolves each of these literature gaps:
-1. **Explicit Regression and Censoring Analysis:** Formulates `CCME_Values` as continuous regression and stratifies metric reporting across ceiling ($=100.0$) and below-ceiling samples.
-2. **Strict Leakage Isolation & Two-Regime Evaluation:**
-   - Immediate exclusion of `CCME_WQI` to eliminate direct label leakage.
-   - **Regime 1 (Formula Emulation):** Training models on the 8 contributing chemical/physical inputs (`Ammonia`, `BOD`, `DO`, `Orthophosphate`, `pH`, `Temperature`, `Nitrogen`, `Nitrate`) to benchmark how closely tree ensembles approximate the closed-form CCME piecewise formula.
-   - **Regime 2 (Independent Environmental Prediction):** Feature ablation excluding the 8 formula inputs and evaluating predictive capacity strictly on independent metadata and spatiotemporal covariates (`Country`, `Area`, `Waterbody Type`, seasonal date transforms).
-   - Detection of upstream median imputation via `<col>__imputed_upstream` flags.
-3. **Controlled, Byte-Identical Experimental Setup:**
-   - Unified random seed (`SEED = 42`) and persisted index partitions (`data/splits/`) ensuring Naive Baseline, Random Forest, and XGBoost evaluate on identical data.
-   - Preprocessing pipelines (`src/preprocess.py`) fitted strictly on $X_{train}$.
-   - Unified evaluation contract (`src/evaluate_api.py`) standardizing metric calculation across all team members.
-4. **Game-Theoretic Model Explainability:**
-   - Tree SHAP analysis (`notebooks/07_shap.ipynb`) using Lundberg & Lee (2017) to verify feature contribution profiles against known chemical and ecological principles.
+1. **Literature-Demonstrated Limitations:**
+   - Aggregated indices suffer from intrinsic eclipsing (masking single-parameter toxicity) and ambiguity (multiple parameter states yielding identical scores) as established by Abbasi & Abbasi (2012) and Lumb et al. (2011).
+   - In tree ensembles, impurity-based feature importance (Gini / MDI) exhibits well-documented bias toward continuous variables and high-cardinality features, requiring permutation-based importance or SHAP values for valid interpretation (Strobl et al., 2007; Lundberg & Lee, 2017).
+2. **General Methodological Risks Supported by Authoritative Sources:**
+   - **Data Leakage in Preprocessing:** Fitting missing-value imputations or normalizations across full datasets prior to splitting artificially inflates test performance (Kaufman et al., 2012).
+   - **Spatial Autocorrelation Overoptimism:** Random k-fold cross-validation on spatially clustered water monitoring networks allows models to memorize localized catchment features rather than learning transport dynamics, requiring grouped or spatial block cross-validation (Roberts et al., 2017).
+3. **Project-Specific Hypotheses Requiring Empirical Investigation:**
+   - **Target Ceiling Censoring:** In the project's dataset, **$35.92\%$ of target values are exactly $100.0$**. Standard regression models evaluated purely on aggregate RMSE or $R^2$ may suffer boundary distortions, hypothesizing the need for stratified metrics (at-ceiling vs. below-ceiling).
+   - **Upstream Median Imputation Confound:** Exploratory data analysis revealed that median imputation was applied upstream across five of the eight chemical variables, predominantly in England records. Whether models exploit these constant fill values as geographical proxies requires empirical ablation.
+   - **Formula Emulation vs. Physical Generalization:** Whether high predictive accuracy on `CCME_Values` reflects equation reconstruction rather than hydrological prediction requires controlled comparison against non-contributing features.
+
+### 6.2 Proposed Experimental Regimes
+To address these concerns transparently, our Phase 1 experimental architecture is structured into two proposed comparative evaluation regimes (with no empirical results claimed prior to model execution):
+
+- **Proposed Regime 1 (Formula Emulation Benchmark):**
+  - *Design:* Train Random Forest and XGBoost using the 8 chemical/physical variables documented as formula contributors (`Ammonia`, `BOD`, `DO`, `Orthophosphate`, `pH`, `Temperature`, `Nitrogen`, `Nitrate`).
+  - *Prerequisite:* Execution is conditional on confirming the upstream target-generation formula and verifying that the dataset reproduces the CCME calculations.
+  - *Objective:* Benchmark the capacity of tree ensembles to approximate the non-linear piecewise CCME geometric distance equation.
+- **Proposed Regime 2 (Independent Environmental Prediction Benchmark):**
+  - *Design:* Exclude all 8 formula-contributing chemical inputs. Train models using strictly non-contributing metadata and spatiotemporal covariates (`Country`, `Area`, `Waterbody Type`, and seasonal date transformations).
+  - *Objective:* Evaluate how accurately water quality index categories can be inferred from environmental context alone, while transparently acknowledging the severe physical limitations of predicting chemical indices without contemporaneous chemical assays.
+
+Both regimes will utilize identical, persisted index partitions (`data/splits/`), shared preprocessing fitted strictly on training data (`src/preprocess.py`), and a standardized evaluation contract (`src/evaluate_api.py`).
 
 ---
 
-## 7. Verified Bibliographic Records (`docs/refs.bib`)
+## 7. Bibliographic Records (`docs/refs.bib`)
 
-Every scientific statement and theoretical claim in this review is mapped to verified bibliographic records in `docs/refs.bib`:
+Every scientific citation in this review is mapped to verified bibliographic records in `docs/refs.bib`:
 
 - **Abbasi, T., & Abbasi, S. A. (2012).** *Water Quality Indices*. Elsevier, Amsterdam. ISBN: 978-0-444-54304-2.
 - **Ahmed, A. N., Othman, F. B., Afan, H. A., Ibrahim, R. K., Fai, C. M., Hossain, M. S., Ehteram, M., & Elshafie, A. (2019).** Machine learning methods for better water quality prediction. *Journal of Hydrology*, 578, 124084. [DOI: 10.1016/j.jhydrol.2019.124084](https://doi.org/10.1016/j.jhydrol.2019.124084).
-- **Aldhyani, T. H. H., Al-Yaari, M., Alkahtani, H., & Maashi, M. (2020).** Water Quality Prediction Using Artificial Intelligence Algorithms. *Applied Bionics and Biomechanics*, 2020, 6659314. [DOI: 10.1155/2020/6659314](https://doi.org/10.1155/2020/6659314).
 - **Breiman, L. (2001).** Random Forests. *Machine Learning*, 45(1), 5–32. [DOI: 10.1023/A:1010933404324](https://doi.org/10.1023/A:1010933404324).
 - **Brown, R. M., McClelland, N. I., Deininger, R. A., & Tozer, R. G. (1970).** A Water Quality Index—Do We Dare? *Water & Sewage Works*, 117(10), 339–343.
-- **Bui, D. T., Khosravi, K., Tiefenbacher, J., Nguyen, H., & Kazakis, N. (2020).** Improving prediction of water quality indices using novel hybrid machine-learning algorithms. *Science of The Total Environment*, 721, 137612. [DOI: 10.1016/j.scitotenv.2020.137612](https://doi.org/10.1016/j.scitotenv.2020.137612).
+- **Bui, D. T., Khosravi, K., Tiefenbacher, J. P., Nguyen, H., & Kazakis, N. (2020).** Improving prediction of water quality indices using novel hybrid machine-learning algorithms. *Science of The Total Environment*, 721, 137612. [DOI: 10.1016/j.scitotenv.2020.137612](https://doi.org/10.1016/j.scitotenv.2020.137612).
 - **Canadian Council of Ministers of the Environment (CCME). (2001).** *Canadian Water Quality Guidelines for the Protection of Aquatic Life: CCME Water Quality Index 1.0, User's Manual*. CCME, Winnipeg.
 - **Chen, T., & Guestrin, C. (2016).** XGBoost: A Scalable Tree Boosting System. In *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining*, pp. 785–794. [DOI: 10.1145/2939672.2939785](https://doi.org/10.1145/2939672.2939785).
 - **Friedman, J. H. (2001).** Greedy function approximation: A gradient boosting machine. *The Annals of Statistics*, 29(5), 1189–1232. [DOI: 10.1214/aos/1013203451](https://doi.org/10.1214/aos/1013203451).
@@ -261,3 +264,4 @@ Every scientific statement and theoretical claim in this review is mapped to ver
 - **Roberts, D. R., Bahn, V., Ciuti, S., Boyce, M. S., Elith, J., Guillera-Arroita, G., Hauenstein, S., Lahoz-Monfort, J. J., Schröder, B., Thuiller, W., & Warton, D. I. (2017).** Cross-validation strategies for data with temporal, spatial, hierarchical or phylogenetic structure. *Ecography*, 40(8), 913–929. [DOI: 10.1111/ecog.02881](https://doi.org/10.1111/ecog.02881).
 - **Strobl, C., Boulesteix, A.-L., Zeileis, A., & Hothorn, T. (2007).** Bias in random forest variable importance measures: Illustrations, sources and a solution. *BMC Bioinformatics*, 8(1), 25. [DOI: 10.1186/1471-2105-8-25](https://doi.org/10.1186/1471-2105-8-25).
 - **Tyralis, H., Papacharalampous, G., & Langousis, A. (2019).** A Brief Review of Random Forests for Water Scientists and Practitioners and Their Recent History in Water Resources. *Water*, 11(5), 910. [DOI: 10.3390/w11050910](https://doi.org/10.3390/w11050910).
+- **Water Quality Research Group. (2024).** *Combined Harmonized Surface-Water Quality Dataset with CCME WQI*. Figshare. [DOI: 10.6084/m9.figshare.27800394](https://doi.org/10.6084/m9.figshare.27800394).
