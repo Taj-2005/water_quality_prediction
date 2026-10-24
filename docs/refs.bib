@@ -1,7 +1,75 @@
-% Single source of truth for citations. Owner: Himanshu.
-% The IEEE LaTeX report cites directly from this file - tell Satya whenever it changes.
-% Target: 8-12 papers on water quality prediction with ML, water quality index
-% definitions, and Random Forest / gradient boosting on tabular data.
+% Single source of truth for citations. Owner: Himanshu Pandey.
+% The IEEE LaTeX report cites directly from this file - maintained for Satya's LaTeX build.
+% Core scope: Water quality indices, ML for environmental forecasting, tree ensembles, and data leakage.
+
+@techreport{ccme2001wqi,
+  author      = {{Canadian Council of Ministers of the Environment}},
+  title       = {Canadian Water Quality Guidelines for the Protection of Aquatic Life: {CCME} Water Quality Index 1.0, User's Manual},
+  institution = {Canadian Council of Ministers of the Environment},
+  address     = {Winnipeg, MB, Canada},
+  year        = {2001}
+}
+
+@article{brown1970wqi,
+  author  = {Brown, Robert M. and McClelland, Nina I. and Deininger, Rolf A. and Tozer, Ronald G.},
+  title   = {A Water Quality Index---{D}o We Dare?},
+  journal = {Water \& Sewage Works},
+  volume  = {117},
+  number  = {10},
+  pages   = {339--343},
+  year    = {1970}
+}
+
+@book{abbasi2012wqi,
+  author    = {Abbasi, Tasneem and Abbasi, S. A.},
+  title     = {Water Quality Indices},
+  publisher = {Elsevier},
+  address   = {Amsterdam, Netherlands},
+  year      = {2012},
+  isbn      = {978-0-444-54304-2}
+}
+
+@article{lumb2011review,
+  author  = {Lumb, Ashok and Sharma, T. C. and Bibeault, Jean-Fran{\c{c}}ois},
+  title   = {A Review of Genesis and Evolution of Water Quality Index ({WQI}) and Its Applications},
+  journal = {Water Quality, Exposure and Health},
+  volume  = {3},
+  number  = {1},
+  pages   = {11--24},
+  year    = {2011},
+  doi     = {10.1007/s12403-011-0040-0}
+}
+
+@article{ahmed2019ml,
+  author  = {Ahmed, Ali Najah and Othman, Faridah Binti and Afan, Haitham Abdulmohsin and Ibrahim, Ruslan Khalid and Fai, Chow Ming and Hossain, Md. Sabbir and Ehteram, Mohammad and Elshafie, Ahmed},
+  title   = {Machine learning methods for better water quality prediction},
+  journal = {Journal of Hydrology},
+  volume  = {578},
+  pages   = {124084},
+  year    = {2019},
+  doi     = {10.1016/j.jhydrol.2019.124084}
+}
+
+@article{bui2020hybrid,
+  author  = {Bui, Dieu Tien and Khosravi, Khabat and Tiefenbacher, John and Nguyen, Hoang and Yaseen, Zaher Mundher},
+  title   = {Improving prediction of water quality indices using novel hybrid machine-learning algorithms},
+  journal = {Science of The Total Environment},
+  volume  = {721},
+  pages   = {137612},
+  year    = {2020},
+  doi     = {10.1016/j.scitotenv.2020.137612}
+}
+
+@article{aldhyani2020ai,
+  author  = {Aldhyani, Theyazn H. H. and Al-Yaari, Mohammad and Alkahtani, Hasan and Maashi, Mashael},
+  title   = {Water quality prediction using artificial intelligence algorithms},
+  journal = {Applied Water Science},
+  volume  = {10},
+  number  = {10},
+  pages   = {228},
+  year    = {2020},
+  doi     = {10.1007/s13201-020-01315-9}
+}
 
 @article{breiman2001randomforests,
   author  = {Breiman, Leo},
@@ -10,29 +78,65 @@
   volume  = {45},
   number  = {1},
   pages   = {5--32},
-  year    = {2001}
+  year    = {2001},
+  doi     = {10.1023/A:1010933404324}
+}
+
+@article{friedman2001gradient,
+  author  = {Friedman, Jerome H.},
+  title   = {Greedy function approximation: {A} gradient boosting machine},
+  journal = {The Annals of Statistics},
+  volume  = {29},
+  number  = {5},
+  pages   = {1189--1232},
+  year    = {2001},
+  doi     = {10.1214/aos/1013203451}
 }
 
 @inproceedings{chen2016xgboost,
   author    = {Chen, Tianqi and Guestrin, Carlos},
   title     = {{XGBoost}: A Scalable Tree Boosting System},
-  booktitle = {Proceedings of the 22nd ACM SIGKDD International Conference on
-               Knowledge Discovery and Data Mining},
+  booktitle = {Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining},
   pages     = {785--794},
-  year      = {2016}
+  year      = {2016},
+  doi       = {10.1145/2939672.2939785}
 }
 
 @inproceedings{lundberg2017shap,
   author    = {Lundberg, Scott M. and Lee, Su-In},
   title     = {A Unified Approach to Interpreting Model Predictions},
   booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {30},
   pages     = {4765--4774},
   year      = {2017}
+}
+
+@article{kaufman2012leakage,
+  author  = {Kaufman, Shachar and Rosset, Saharon and Perlich, Claudia and Stitelman, Ori},
+  title   = {Leakage in Data Mining: Formulation, Detection, and Avoidance},
+  journal = {ACM Transactions on Knowledge Discovery from Data},
+  volume  = {6},
+  number  = {4},
+  pages   = {15:1--15:21},
+  year    = {2012},
+  doi     = {10.1145/2382577.2382579}
+}
+
+@article{roberts2017cv,
+  author  = {Roberts, David R. and Bahn, Volker and Ciuti, Simone and Boyce, Mark S. and Elith, Jane and Guillera-Arroita, Gurutzeta and Hauenstein, Severin and Lahoz-Monfort, Jos{\'e} J. and Schr{\"o}der, Boris and Thuiller, Wilfried and Warton, David I.},
+  title   = {Cross-validation strategies for data with temporal, spatial, hierarchical or phylogenetic structure},
+  journal = {Ecography},
+  volume  = {40},
+  number  = {8},
+  pages   = {913--929},
+  year    = {2017},
+  doi     = {10.1111/ecog.02881}
 }
 
 @book{goodfellow2016deeplearning,
   author    = {Goodfellow, Ian and Bengio, Yoshua and Courville, Aaron},
   title     = {Deep Learning},
   publisher = {MIT Press},
+  address   = {Cambridge, MA, USA},
   year      = {2016}
 }
