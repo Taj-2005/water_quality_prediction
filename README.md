@@ -61,17 +61,27 @@ incompatible water quality standards.
 - **Location:** `data/raw/Combined_dataset.csv`
 - **Documentation:** every column — unit, meaning, source, license — is recorded in
   [docs/data_dictionary.md](docs/data_dictionary.md).
-- **Raw data is never edited in place and never committed.** `data/` is git-ignored
-  except for its folder structure; see [Reproducing results](#6-reproducing-results).
+- **Raw data is never edited in place.** `data/raw/Combined_dataset.csv` (305 MiB) is
+  tracked with **Git LFS**, so `git lfs install` is required before cloning or you will
+  receive a pointer file instead of the data.
+- **The cleaned table is committed** as `data/processed/clean.parquet` (45 MB, plain
+  git, no LFS), so every member models identical bytes rather than relying on each
+  person's rerun. It loads in 0.3 s against the CSV's 8.5 s and preserves the category
+  and boolean dtypes a CSV round trip loses.
+- **`clean.csv` is not committed** — 559 MiB exceeds GitHub's 100 MB plain-git limit,
+  and via LFS it would consume most of the free 1 GiB quota. Generate it locally when
+  you need it: see [Generating `clean.csv`](#generating-cleancsv). `data/splits/` is
+  likewise git-ignored and regenerated.
 
 ### Data handling rules
 
 | Stage | Rule |
 | :--- | :--- |
-| Units | made consistent across all rows before anything else |
-| Detection limits | values like `<0.5` handled by **one stated rule**, documented in the cleaning notebook |
-| Impossible values | **flagged**, not silently deleted (e.g. pH outside 0–14, negative turbidity) |
-| Duplicates | exact duplicates removed |
+| Units | verified consistent per column (mg/l, pH units, °C); no mixed-unit rows found |
+| Detection limits | none present — verified in [docs/data_dictionary.md](docs/data_dictionary.md); the upstream harmonization already resolved censored values |
+| Upstream imputation | 5 of 8 measurement columns carry their exact median at 11–32 % of rows; flagged per column rather than silently inherited |
+| Impossible values | **flagged**, not silently deleted (pH outside 0–14, negative concentrations, temperature above 40 °C) |
+| Duplicates | 9,971 exact duplicate rows (0.35 %) removed |
 | Imputation | **not** done during cleaning — it lives in the preprocessing pipeline and is fitted on **train only** |
 
 ---
@@ -123,7 +133,7 @@ time period, so the model's behaviour is explainable in the viva and not just sc
 water_quality_prediction/
 ├── data/
 │   ├── raw/                     # original dataset, never edited (git-ignored)
-│   ├── processed/               # clean.csv, output of src/clean.py (git-ignored)
+│   ├── processed/               # clean.parquet (committed); clean.csv generated locally
 │   └── splits/                  # saved train/val/test indices (git-ignored)
 ├── notebooks/
 │   ├── 01_cleaning.ipynb        # cleaning decisions, each with its reason
@@ -187,8 +197,34 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Then place the raw dataset in `data/raw/` under the filename recorded in
-[docs/data_dictionary.md](docs/data_dictionary.md).
+### Notebook kernel
+
+Register the virtual environment as a Jupyter kernel, once per machine:
+
+```bash
+python -m ipykernel install --user --name water-quality \
+    --display-name "Python (water_quality .venv)"
+```
+
+Then select **Python (water_quality .venv)** as the kernel in every notebook. A kernel
+pointing at a global interpreter is the usual cause of:
+
+```
+ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+```
+
+The packages are in `requirements.txt`, but they are installed into the venv — not into
+whichever interpreter your notebook happens to be running. `load_data()` falls back to
+`clean.csv` when no parquet engine is present, so the notebook still works; it is just
+slower and loses the category and boolean dtypes.
+
+### Raw data
+
+The raw dataset is tracked with Git LFS, so a fresh clone needs:
+
+```bash
+git lfs install && git lfs pull
+```
 
 ---
 
@@ -196,9 +232,13 @@ Then place the raw dataset in `data/raw/` under the filename recorded in
 
 Run in this order — each step depends on the previous one.
 
+`data/processed/clean.parquet` is **committed**, so a fresh clone can skip step 1 and go
+straight to modelling. Regenerate it only when the cleaning logic changes.
+
 ```bash
 # 1. raw -> cleaned, documented table (no imputation here)
-python -m src.clean
+#    see "Generating clean.csv" below if you need the CSV as well
+python -m src.clean --no-csv
 
 # 2. create the shared split once; writes indices to data/splits/
 python -m src.split
@@ -207,6 +247,38 @@ python -m src.split
 python -m src.models_rf        # -> reports/rf_results.csv
 python -m src.models_xgb       # -> reports/xgb_results.csv
 ```
+
+### Generating `clean.csv`
+
+`clean.csv` is **git-ignored and never committed** — at 559 MiB it exceeds GitHub's
+100 MB plain-git limit, and tracking it in LFS would consume most of the free 1 GiB
+quota, blocking pushes for the whole team after a single regeneration.
+
+Most work does not need it: `load_data()` reads the committed `clean.parquet`, which
+holds the identical 2,818,006 × 30 table. Generate the CSV only if you specifically need
+a plain-text copy — to open it in Excel, to diff it, or to hand it to a tool that cannot
+read parquet.
+
+```bash
+# both formats: clean.parquet (45 MB) and clean.csv (559 MiB)
+python -m src.clean
+
+# parquet only - the default for everyday work
+python -m src.clean --no-csv
+```
+
+The pipeline is deterministic — a fixed cleaning rule set and no sampling — so every
+member's regenerated file is byte-identical. Measured on the full 2,827,977 rows: about
+**32 seconds** and **1.4 GiB** of peak memory for both formats.
+
+| Command | Writes | Committed |
+| :--- | :--- | :--- |
+| `python -m src.clean` | `clean.parquet` + `clean.csv` | parquet only |
+| `python -m src.clean --no-csv` | `clean.parquet` | yes |
+| `python -m src.clean --profile` | nothing — prints the figures behind [docs/data_dictionary.md](docs/data_dictionary.md) | — |
+
+**Never run `git add data/processed/clean.csv`.** The `.gitignore` prevents it by
+default; forcing it past that is what would exhaust the LFS quota.
 
 Then run the notebooks in numeric order for the EDA, baseline, evaluation table and SHAP
 analysis. The random seed is fixed in one place and used everywhere, so a clean run
@@ -288,6 +360,25 @@ Taj: repo + branch rules + seed
 ---
 
 ## 9. Contributing workflow
+
+### Quality gate
+
+Every push and pull request runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+lint, format check, unit tests, and a check that no notebook was committed carrying an
+error traceback in its outputs. Run the same checks locally before pushing:
+
+```bash
+ruff check src/ tests/        # lint
+ruff format src/ tests/       # format (use --check to verify without writing)
+pytest tests/                 # unit tests
+```
+
+The tests run on small synthetic frames and **never touch the dataset**. That is
+deliberate: CI checks out with `lfs: false`, because pulling the 305 MiB raw file on
+every push would exhaust the repository's 1 GiB/month LFS bandwidth allowance — which is
+shared by all five of us. Correctness on the real data is demonstrated by
+[`notebooks/01_cleaning.ipynb`](notebooks/01_cleaning.ipynb), whose outputs are committed.
+
 
 - **One branch per person**, named `feat/<name>-<task>` (e.g. `feat/taj-cleaning`).
 - Open a **pull request into `main`** and wait for the team lead's review (Taj). **Never push straight to `main`.**

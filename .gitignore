@@ -6,6 +6,10 @@ data/splits/*
 !data/processed/.gitkeep
 !data/splits/.gitkeep
 !data/raw/Combined_dataset.csv
+# The cleaned table is committed as parquet only (45 MB, plain git).
+# clean.csv stays ignored: 559 MiB exceeds GitHub's 100 MB plain-git limit, and via LFS
+# it would consume most of the free 1 GiB quota. Regenerate it with: python -m src.clean
+!data/processed/clean.parquet
 
 # Trained models
 models/
@@ -23,6 +27,7 @@ venv/
 env/
 .pytest_cache/
 .ruff_cache/
+.coverage
 
 # Jupyter
 .ipynb_checkpoints/
