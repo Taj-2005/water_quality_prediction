@@ -16,30 +16,32 @@ see individual contribution, so write it as you go rather than at the end.
 
 ## What I built
 
-1. **Literature Review & Citation Repository (`docs/refs.bib`)**:
-   - Curated and validated 14 peer-reviewed and foundational citations covering:
-     - Water quality assessment and WQI mathematical formulations (CCME 2001, Brown et al. 1970, Abbasi & Abbasi 2012, Lumb et al. 2011).
-     - Applied machine learning benchmarks for water resource modeling (Ahmed et al. 2019, Bui et al. 2020, Aldhyani et al. 2020).
-     - Core ensemble theory: Random Forest (Breiman 2001), Gradient Boosting (Friedman 2001), XGBoost (Chen & Guestrin 2016).
-     - Explainability and game-theoretic attribution: SHAP (Lundberg & Lee 2017).
-     - Methodology, data leakage, and spatiotemporal validation (Kaufman et al. 2012, Roberts et al. 2017, Goodfellow et al. 2016).
-   - Produced the comprehensive 6-part Literature Review document detailing WQI derivation, tree-ensemble variance reduction vs. gradient descent in function space, chemical feature engineering, and the distinction between index emulation versus environmental prediction.
-2. **Audit & Upstream Verification**:
-   - Performed Phase 1 pre-flight audit of Parth's and Taj's deliverables, pinpointing the critical target formula leakage (Spearman rho = -0.917 for Orthophosphate) and upstream median imputation confound in England.
+1. **Rigorous Literature Review & Verified BibTeX Repository (`docs/literature_review.md`, `docs/refs.bib`)**:
+   - Curated and verified 17 foundational and empirical references across WQI theory (CCME 2001, Horton 1965, Brown et al. 1970, Abbasi & Abbasi 2012, Lumb et al. 2011), machine learning applications in water science (Ahmed et al. 2019, Bui et al. 2020, Aldhyani et al. 2020, Tyralis et al. 2019), ensemble theory (Breiman 2001, Friedman 2001, Chen & Guestrin 2016), feature importance bias (Strobl et al. 2007), game-theoretic explainability (Lundberg & Lee 2017), deep learning fundamentals (Goodfellow et al. 2016), and data leakage prevention (Kaufman et al. 2012, Roberts et al. 2017).
+   - Audited and corrected all bibliographic metadata (fixed Aldhyani et al. DOI and journal from a misattributed pesticide paper to *Applied Bionics and Biomechanics*, corrected Bui et al. and Ahmed et al. co-authors, and added missing Horton and Strobl citations).
+   - Removed unverified empirical claims, replacing them with accurate descriptions of model architectures (e.g., Bui et al.'s bagging-tree ensembles in Iran, Ahmed et al.'s WDT-ANFIS in Malaysia, and Aldhyani et al.'s NARNET/LSTM vs. SVM on Indian rivers).
+   - Harmonized feature engineering proposals with the actual 14-column dataset schema (removed non-existent $BOD:COD$ ratio, added $\epsilon$-smoothing for zero denominators in nutrient ratios, and verified that Temperature is an active formula input).
+   - Formally clarified the distinction between the standard multi-period CCME protocol and the dataset-specific point-in-time ($F_2 \equiv F_1$) row adaptation.
+
+2. **Phase 1 Upstream Pre-Flight Audit**:
+   - Inspected upstream branches (`origin/feat/parth`, `origin/feat/taj-cleaning`, `origin/feat/taj-eda`).
+   - Identified unmerged PR blockers on Taj's branch and confirmed that Parth's split and preprocessing scripts remain unimplemented stubs, preventing premature model implementation.
 
 ## Why I built it that way
 
-1. **Why distinguish index emulation from environmental prediction**:
-   - Many published works report near-perfect R^2 (>0.98) predicting a WQI from the exact chemical constituents that define the index formula, without acknowledging this as closed-form formula recovery rather than true physical prediction. Documenting this distinction upfront establishes the theoretical rigor required for the IEEE report and viva.
-2. **Why centralize BibTeX in `docs/refs.bib`**:
-   - Satya requires clean, verified citation keys (`@article`, `@inproceedings`, `@techreport`) to compile the Overleaf LaTeX report without missing references or corrupted formatting.
+1. **Why distinguish formula emulation from true environmental prediction**:
+   - Many published works claim high predictive accuracy ($R^2 > 0.95$) without disclosing that the model is merely learning to approximate a closed-form algebraic formula from its contributing inputs. Framing the project around two distinct evaluation regimes (Regime 1: formula emulation; Regime 2: feature ablation on non-contributing spatiotemporal covariates) ensures scientific honesty for the IEEE report and viva.
+2. **Why enforce strict schema and numerical safeguards in feature proposals**:
+   - Environmental sensor data contains values near zero and isolated negative readings from sensor baseline drift (e.g., Orthophosphate min $-0.004$). Defining explicit clipping ($\max(0, x)$) and smoothing denominators ($x / (y + \epsilon)$) prevents fatal `ZeroDivisionError` and `NaN` propagation during model training.
+3. **Why centralize verified BibTeX in `docs/refs.bib`**:
+   - Satya requires verified citation keys to compile the IEEE LaTeX report without citation compilation warnings or inaccurate citations during examination.
 
 ## How it connects to the rest of the pipeline
 
-- **Supplied to Satya**: Complete BibTeX entries in `docs/refs.bib` and structured Literature Review synthesis for Section II of the IEEE report.
-- **Supplied to Jivit**: Theoretical foundation for Random Forest vs. XGBoost comparison and feature ablation rationale.
-- **Next Stage (Awaiting Parth's Split & Pipeline)**: Once Parth lands `src/split.py` and `src/preprocess.py`, I will implement chemical ratios, log transforms, and leakage-safe aggregations in `src/features.py`, followed by Random Forest tuning in `src/models_rf.py`.
+- **Supplied to Satya**: Verified BibTeX entries in `docs/refs.bib` and literature review synthesis for Section II of the IEEE report.
+- **Supplied to Jivit**: Theoretical foundation for Random Forest vs. XGBoost comparison and feature ablation design.
+- **Next Stage (Awaiting Parth's Split & Pipeline)**: Once Parth merges `src/split.py` and `src/preprocess.py`, I will implement chemical ratios, log transforms, and leakage-safe aggregations in `src/features.py`, followed by Random Forest tuning in `src/models_rf.py`.
 
 ## What I would do differently
 
-- In academic papers on WQI prediction, authors rarely publish their exact cross-validation split indices, making direct experimental replication impossible. In our project, all splits are strictly persisted to `data/splits/` to enforce reproducible benchmarks across Random Forest, XGBoost, and the naive baseline.
+- In academic literature on WQI prediction, authors rarely publish their exact cross-validation split indices, making direct experimental replication impossible. In our project, all splits are strictly persisted to `data/splits/` to enforce reproducible benchmarks across Random Forest, XGBoost, and the naive baseline.
