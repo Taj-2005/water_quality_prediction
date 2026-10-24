@@ -19,7 +19,7 @@ Surface freshwater ecosystems are subject to compounding pressures from industri
 Because individual water samples often satisfy standards for some analytes while simultaneously violating ecological thresholds for others, reporting raw chemical matrices creates communication barriers for environmental managers and regulatory bodies.
 
 ### 1.2 Genesis and Structure of Water Quality Indices
-To transform multidimensional water analyses into actionable metrics, composite **Water Quality Indices (WQIs)** were formulated, originating with Horton (1965) and formalized by Brown et al. (1970) for the National Sanitation Foundation (NSF WQI). A WQI aggregates disparate physical and chemical measurements into a single, dimensionless score (typically on a $0	ext{--}100$ scale). Subsequent global adaptations include the Oregon WQI, the British Columbia WQI, weighted arithmetic WQIs, and the Canadian Council of Ministers of the Environment Water Quality Index (CCME WQI) (Lumb et al., 2011).
+To transform multidimensional water analyses into actionable metrics, composite **Water Quality Indices (WQIs)** were formulated, originating with Horton (1965) and formalized by Brown et al. (1970) for the National Sanitation Foundation (NSF WQI). A WQI aggregates disparate physical and chemical measurements into a single, dimensionless score (typically on a $0\text{--}100$ scale). Subsequent global adaptations include the Oregon WQI, the British Columbia WQI, weighted arithmetic WQIs, and the Canadian Council of Ministers of the Environment Water Quality Index (CCME WQI) (Lumb et al., 2011).
 
 Classical index formulations historically suffer from structural aggregation pitfalls:
 - **Eclipsing:** An aggregated index registers an acceptable score despite a single critical toxicant violating lethal environmental thresholds (Abbasi & Abbasi, 2012).
@@ -29,35 +29,35 @@ Classical index formulations historically suffer from structural aggregation pit
 The CCME WQI methodology (CCME, 2001) is designed to evaluate guideline non-compliance across three orthogonal geometric dimensions:
 
 1. **Scope ($F_1$):** Percentage of water quality variables failing to meet guidelines at least once during the sampling window relative to the total number of variables evaluated:
-   $$F_1 = \left( rac{	ext{Number of failed variables}}{	ext{Total number of variables}} ight) 	imes 100$$
+   $$F_1 = \left( \frac{\text{Number of failed variables}}{\text{Total number of variables}} \right) \times 100$$
 
 2. **Frequency ($F_2$):** Percentage of individual analytical tests that violate guideline standards across all samples and sampling times:
-   $$F_2 = \left( rac{	ext{Number of failed tests}}{	ext{Total number of tests}} ight) 	imes 100$$
+   $$F_2 = \left( \frac{\text{Number of failed tests}}{\text{Total number of tests}} \right) \times 100$$
 
 3. **Amplitude ($F_3$):** Amount by which non-compliant measurements exceed permissible standards.
    - For parameters where higher values exceed the standard (nutrients, BOD):
-     $$	ext{excursion}_i = \left( rac{	ext{value}_i}{	ext{standard}_i} ight) - 1$$
+     $$\text{excursion}_i = \left( \frac{\text{value}_i}{\text{standard}_i} \right) - 1$$
    - For parameters where values below standard represent failure (dissolved oxygen):
-     $$	ext{excursion}_i = \left( rac{	ext{standard}_i}{	ext{value}_i} ight) - 1$$
+     $$\text{excursion}_i = \left( \frac{\text{standard}_i}{\text{value}_i} \right) - 1$$
    - Normalized sum of excursions ($nse$):
-     $$nse = rac{\sum_{i=1}^{	ext{failed}} 	ext{excursion}_i}{	ext{Total number of tests}}$$
+     $$nse = \frac{\sum_{i=1}^{\text{failed}} \text{excursion}_i}{\text{Total number of tests}}$$
    - Asymptotic hyperbolic transformation bounding $F_3$ strictly in $[0, 100]$:
-     $$F_3 = rac{nse}{0.01 \cdot nse + 0.01}$$
+     $$F_3 = \frac{nse}{0.01 \cdot nse + 0.01}$$
 
-The composite index is calculated as the Euclidean vector distance from the theoretical worst-case impaired point $(F_1=100, F_2=100, F_3=100)$, normalized by $\sqrt{100^2 + 100^2 + 100^2} = \sqrt{30000} pprox 173.2$:
-$$	ext{CCME\_Values} = 100 - \left( rac{\sqrt{F_1^2 + F_2^2 + F_3^2}}{1.732} ight)$$
+The composite index is calculated as the Euclidean vector distance from the theoretical worst-case impaired point $(F_1=100, F_2=100, F_3=100)$, normalized by $\sqrt{100^2 + 100^2 + 100^2} = \sqrt{30000} \approx 173.2$:
+$$\text{CCME\_Values} = 100 - \left( \frac{\sqrt{F_1^2 + F_2^2 + F_3^2}}{1.732} \right)$$
 
 This maps to five categorical quality bands: **Excellent (95–100)**, **Good (80–94)**, **Fair (65–79)**, **Marginal (45–64)**, and **Poor (0–44)**.
 
 #### Critical Distinction: Official Protocol vs. Dataset-Specific Row-Level Calculation
 An essential distinction must be maintained between official regulatory methodology and dataset-specific calculation:
 - **Official CCME Protocol (CCME, 2001):** The official standard explicitly mandates an aggregative temporal monitoring window requiring **at least four variables sampled on at least four separate monitoring events** (minimum 16 analytical tests). The CCME index is conceptually designed to assess a river reach or lake over a season or year, capturing temporal failure frequency ($F_2$).
-- **Dataset-Specific Row-Level Adaptation:** In the project's harmonized surface-water monitoring dataset (Figshare DOI: 10.6084/m9.figshare.27800394), the CCME WQI is reported on a per-row, instantaneous basis ($N=1$ per timestamp). When computed on a single measurement event across $P$ variables, the total number of tests equals $P$, and the number of failed tests equals the number of failed variables ($k$). Consequently, **Frequency ($F_2$) collapses algebraically to Scope ($F_1$)**, leaving only two independent factors ($F_1$ and $F_3$). While this adaptation allows continuous tabular regression on individual sampling rows, it represents an empirical modification rather than the standard multi-period CCME protocol.
-- **Provisional Status:** Whether this dataset strictly followed this exact single-row CCME algebraic implementation is documented in `docs/target_definition.md` (citing upstream notebook `Data_Processing_Harmonization.ipynb`), but remains **provisional** until the source harmonization scripts and raw 305 MB CSV can be executed and verified locally.
+- **Dataset-Specific Row-Level Adaptation:** In the project's harmonized surface-water monitoring dataset (Figshare DOI: 10.6084/m9.figshare.27800394, CC BY 4.0 license), the CCME WQI is reported on a per-row, instantaneous basis ($N=1$ per timestamp). When computed on a single measurement event across $P$ variables, the total number of tests equals $P$, and the number of failed tests equals the number of failed variables ($k$). Consequently, **Frequency ($F_2$) collapses algebraically to Scope ($F_1$)**, leaving only two independent factors ($F_1$ and $F_3$). While this adaptation allows continuous tabular regression on individual sampling rows, it represents an empirical modification rather than the standard multi-period CCME protocol.
+- **Provisional Status:** Whether this dataset strictly followed this exact single-row CCME algebraic implementation—and the upstream report of a zero-error mathematical reconstruction ($0.000000$ error cited in `docs/target_definition.md` from `Data_Processing_Harmonization.ipynb`)—remains **provisional** until the source harmonization scripts and raw 305 MB CSV can be executed and independently verified locally.
 
 ### 1.4 Index Calculation vs. Predictive Modeling
-- **Index Calculation:** A closed-form, deterministic mathematical mapping $\mathcal{F}: \mathbb{R}^P 	o [0, 100]$. Given contemporaneous laboratory measurements, calculating CCME WQI requires no estimation or model training.
-- **Predictive Modeling:** Approximates an unknown or unobserved physical data-generating process $\hat{f}(X) pprox y$. Machine learning is applied when:
+- **Index Calculation:** A closed-form, deterministic mathematical mapping $\mathcal{F}: \mathbb{R}^P \to [0, 100]$. Given contemporaneous laboratory measurements, calculating CCME WQI requires no estimation or model training.
+- **Predictive Modeling:** Approximates an unknown or unobserved physical data-generating process $\hat{f}(X) \approx y$. Machine learning is applied when:
   1. Inferring expensive, delayed lab measurements (e.g., 5-day BOD) from rapid, in-situ optical/electrochemical sensors (pH, conductivity).
   2. Forecasting future water quality states $y_{t+\Delta t}$ from historical time series.
   3. Spatial interpolation across ungauged river catchments.
@@ -76,7 +76,7 @@ Supervised machine learning captures high-dimensional, non-linear hydrochemical 
 
 ### 2.2 Regression vs. Classification Objectives
 
-| Criterion | Continuous Regression ($y \in [0, 100]$) | Categorical Classification ($y \in \{	ext{Poor}, \dots, 	ext{Excellent}\}$) |
+| Criterion | Continuous Regression ($y \in [0, 100]$) | Categorical Classification ($y \in \{\text{Poor}, \dots, \text{Excellent}\}$) |
 | :--- | :--- | :--- |
 | **Information Retention** | Retains all variance, fine-grained gradients, and trajectory dynamics. | Discretizes continuous space into discrete bins, discarding within-class variance. |
 | **Threshold Sensitivity** | Smooth, continuous penalization across all ranges. | Discontinuous 0/1 penalty; a shift across 79.9 to 80.1 is penalized identically to 50 to 95. |
@@ -97,15 +97,14 @@ Discretizing intrinsically continuous water quality indices into qualitative cla
 ### 3.1 Algorithm Mechanics: Bagging, Random Subspaces, and Variance Reduction
 Random Forest (Breiman, 2001) is an ensemble of decorrelated decision trees (CART). Individual decision trees are low-bias, high-variance estimators that overfit local training noise. Random Forest achieves substantial variance reduction without inflating bias through two mechanics:
 
-1. **Bootstrap Aggregation (Bagging):** For an ensemble of $B$ trees, each tree $T_b$ ($b = 1, \dots, B$) is trained on an independent bootstrap sample $\mathcal{D}_b$ of size $N$ drawn uniformly with replacement from training data $\mathcal{D}$. Each bootstrap sample contains $pprox 63.2\%$ unique observations, leaving $pprox 36.8\%$ as Out-of-Bag (OOB) samples.
-2. **Random Subspace Method:** At every split node within each tree, split optimization is restricted to a randomly selected subset of $m \ll p$ candidate features (typically $m = \lfloor p/3 floor$ for regression).
+1. **Bootstrap Aggregation (Bagging):** For an ensemble of $B$ trees, each tree $T_b$ ($b = 1, \dots, B$) is trained on an independent bootstrap sample $\mathcal{D}_b$ of size $N$ drawn uniformly with replacement from training data $\mathcal{D}$. Each bootstrap sample contains $\approx 63.2\%$ unique observations, leaving $\approx 36.8\%$ as Out-of-Bag (OOB) samples.
+2. **Random Subspace Method:** At every split node within each tree, split optimization is restricted to a randomly selected subset of $m \ll p$ candidate features (typically $m = \lfloor p/3 \rfloor$ for regression).
 
-The mathematical basis for ensemble variance reduction is demonstrated by considering $B$ identically distributed tree estimators, each with variance $\sigma^2$ and positive pairwise correlation $ho = 	ext{Corr}(T_i(X), T_j(X))$ for $i 
-e j$. The ensemble average variance $ar{T}(X) = rac{1}{B} \sum_{b=1}^B T_b(X)$ is:
-$$	ext{Var}(ar{T}(X)) = ho \sigma^2 + rac{1 - ho}{B} \sigma^2$$
-As tree count increases ($B 	o \infty$):
-$$\lim_{B 	o \infty} 	ext{Var}(ar{T}(X)) = ho \sigma^2$$
-Standard bagging reduces the second term $rac{1-ho}{B}\sigma^2$, but cannot reduce $ho \sigma^2$. The random feature subsampling mechanism decorrelates the trees by preventing dominant predictors (such as Orthophosphate in CCME WQI) from appearing at the root of every tree, thereby lowering $ho$ and reducing the ensemble variance floor.
+The mathematical basis for ensemble variance reduction is demonstrated by considering $B$ identically distributed tree estimators, each with variance $\sigma^2$ and positive pairwise correlation $\rho = \text{Corr}(T_i(X), T_j(X))$ for $i \ne j$. The ensemble average variance $\bar{T}(X) = \frac{1}{B} \sum_{b=1}^B T_b(X)$ is:
+$$\text{Var}(\bar{T}(X)) = \rho \sigma^2 + \frac{1 - \rho}{B} \sigma^2$$
+As tree count increases ($B \to \infty$):
+$$\lim_{B \to \infty} \text{Var}(\bar{T}(X)) = \rho \sigma^2$$
+Standard bagging reduces the second term $\frac{1-\rho}{B}\sigma^2$, but cannot reduce $\rho \sigma^2$. The random feature subsampling mechanism decorrelates the trees by preventing dominant predictors (such as Orthophosphate in CCME WQI) from appearing at the root of every tree, thereby lowering $\rho$ and reducing the ensemble variance floor.
 
 ### 3.2 Out-of-Bag (OOB) Error and Variable Importance
 - **OOB Generalization:** Evaluating each sample $i$ using only the subset of trees where sample $i$ was omitted from bootstrapping provides an internal, unbiased estimate of generalization error without requiring a separate validation set (Breiman, 2001).
@@ -115,7 +114,7 @@ Standard bagging reduces the second term $rac{1-ho}{B}\sigma^2$, but cannot re
 
 ### 3.3 Empirical Studies in Water Resources
 - **Ahmed et al. (2019)** investigated machine learning methods for water quality constituent prediction in the Johor River Basin, Malaysia. They evaluated Multi-Layer Perceptrons (MLP), Radial Basis Function (RBF) networks, and Adaptive Neuro-Fuzzy Inference Systems (ANFIS). Their findings demonstrated that integrating a wavelet de-noising technique with ANFIS (WDT-ANFIS) improved the modeling of non-linear hydrological series by filtering high-frequency measurement noise prior to inference.
-- **Bui et al. (2020)** evaluated four tree-based algorithms (Random Forest, M5P, Random Tree, and Reduced Error Pruning Tree) combined with three meta-learning ensemble frameworks (Bagging, Cross-Validation Parameter Selection, and Randomizable Filtered Classification) for predicting the Iran Water Quality Index ($	ext{IRWQI}_{sc}$) in the Talar catchment, Iran. The authors reported that the hybrid **Bagging-Random Tree (BA-RT)** model achieved the highest predictive accuracy among the evaluated configurations ($R^2 = 0.941$, $	ext{RMSE} = 2.71$), demonstrating that bagging ensembles effectively reduce prediction variance across multi-year hydrological data.
+- **Bui et al. (2020)** evaluated four tree-based algorithms (Random Forest, M5P, Random Tree, and Reduced Error Pruning Tree) combined with three meta-learning ensemble frameworks (Bagging, Cross-Validation Parameter Selection, and Randomizable Filtered Classification) for predicting the Iran Water Quality Index ($\text{IRWQI}_{sc}$) in the Talar catchment, Iran. The authors reported that the hybrid **Bagging-Random Tree (BA-RT)** model achieved the highest predictive accuracy among the evaluated configurations ($R^2 = 0.941$, $\text{RMSE} = 2.71$), demonstrating that bagging ensembles effectively reduce prediction variance across multi-year hydrological data.
 - **Tyralis et al. (2019)** conducted a comprehensive review of Random Forests in hydrology and water resources, synthesizing findings across over 200 studies. They concluded that Random Forest is widely favored across water science due to its low parameter-tuning burden, resistance to overfitting when tree count grows large, and intrinsic out-of-bag validation capabilities.
 
 ---
@@ -126,7 +125,7 @@ Standard bagging reduces the second term $rac{1-ho}{B}\sigma^2$, but cannot re
 Gradient Boosting (Friedman, 2001) builds an additive model sequentially. Rather than averaging independent trees, it optimizes a differentiable loss function $\mathcal{L}(y, \hat{y})$ via gradient descent in function space:
 $$\hat{y}_i^{(M)} = \sum_{m=1}^M f_m(x_i)$$
 At step $m$, given previous predictions $\hat{y}_i^{(m-1)}$, the algorithm computes the negative gradient (pseudo-residuals):
-$$r_{im} = -\left[ rac{\partial \mathcal{L}(y_i, \hat{y})}{\partial \hat{y}} ight]_{\hat{y} = \hat{y}_i^{(m-1)}}$$
+$$r_{im} = -\left[ \frac{\partial \mathcal{L}(y_i, \hat{y})}{\partial \hat{y}} \right]_{\hat{y} = \hat{y}_i^{(m-1)}}$$
 A new regression tree $f_m(x)$ is fitted to predict these residuals, scaled by a shrinkage learning rate $\eta \in (0, 1]$ to control variance:
 $$\hat{y}_i^{(m)} = \hat{y}_i^{(m-1)} + \eta f_m(x_i)$$
 
@@ -134,8 +133,8 @@ $$\hat{y}_i^{(m)} = \hat{y}_i^{(m-1)} + \eta f_m(x_i)$$
 Chen and Guestrin (2016) introduced XGBoost, addressing computational bottlenecks and overfitting through key algorithmic features:
 1. **Second-Order Taylor Expansion:** Uses both first-order gradients $g_i$ and second-order Hessians $h_i$ to approximate the objective function.
 2. **Explicit Regularization:** Penalizes tree complexity directly in the loss function:
-   $$\Omega(f) = \gamma T + rac{1}{2}\lambda \sum_{j=1}^T w_j^2 + lpha \sum_{j=1}^T |w_j|$$
-   where $T$ is terminal leaf count, $w_j$ is leaf weight, $\gamma$ is the minimum gain required to split, and $\lambda, lpha$ provide $L_2$ and $L_1$ shrinkage.
+   $$\Omega(f) = \gamma T + \frac{1}{2}\lambda \sum_{j=1}^T w_j^2 + \alpha \sum_{j=1}^T |w_j|$$
+   where $T$ is terminal leaf count, $w_j$ is leaf weight, $\gamma$ is the minimum gain required to split, and $\lambda, \alpha$ provide $L_2$ and $L_1$ shrinkage.
 3. **Sparsity-Aware Split Finding:** Automatically learns default split pathways for missing values.
 
 ### 4.3 Controlled Comparisons: Random Forest vs. XGBoost
@@ -151,7 +150,7 @@ Chen and Guestrin (2016) introduced XGBoost, addressing computational bottleneck
 ## 5. Feature Engineering and Data Leakage
 
 ### 5.1 Hydrochemical Domain Feature Engineering and Schema Verification
-Feature engineering proposals must be evaluated against the actual columns in the project's 14-column dataset (`Combined_dataset.csv`, Figshare DOI: 10.6084/m9.figshare.27800394).
+Feature engineering proposals must be evaluated against the actual columns in the project's 14-column dataset (`Combined_dataset.csv`, Figshare DOI: 10.6084/m9.figshare.27800394, CC BY 4.0 license).
 
 #### Verification of Available Dataset Columns:
 The documented schema consists of:
@@ -163,22 +162,22 @@ The documented schema consists of:
 
 #### Candidate Chemical Features and Numerical Safeguards:
 1. **Candidate Nutrient Stoichiometric Ratio ($N:P$ Ratio):**
-   - *Candidate Formula:* $[	ext{Nitrogen}] / ([	ext{Orthophosphate}] + \epsilon)$
+   - *Candidate Formula:* $[\text{Nitrogen}] / ([\text{Orthophosphate}] + \epsilon)$
    - *Scientific Interpretation:* Proposes to capture relative nutrient limitation (nitrogen- vs. phosphorus-limited algal biomass).
-   - *Data Validation & Caveats:* In the raw dataset, `Orthophosphate (mg/l)` contains values at or near zero (minimum $-0.004$, 10 negative readings). An arithmetic smoothing term $\epsilon = 0.001	ext{ mg/l}$ prevents division-by-zero, but **smoothing alone does not guarantee scientific validity**. Clipping negative values ($\max(0, x)$) changes the statistical distribution of instrument sensor noise near detection limits; such adjustments require explicit validation against data provenance.
+   - *Data Validation & Caveats:* In the raw dataset, `Orthophosphate (mg/l)` contains values at or near zero (minimum $-0.004$, 10 negative readings). An arithmetic smoothing term $\epsilon = 0.001\text{ mg/l}$ prevents division-by-zero, but **smoothing alone does not guarantee scientific validity**. Clipping negative values ($\max(0, x)$) changes the statistical distribution of instrument sensor noise near detection limits; such adjustments require explicit validation against data provenance.
 2. **Candidate Inorganic Nitrogen Speciation Ratio:**
-   - *Candidate Formula:* $[	ext{Ammonia}] / ([	ext{Nitrate}] + \epsilon)$
+   - *Candidate Formula:* $[\text{Ammonia}] / ([\text{Nitrate}] + \epsilon)$
    - *Scientific Interpretation:* Evaluates the proportion of reduced (ammonia) to oxidized (nitrate) nitrogen, reflecting nitrification and oxygen consumption.
    - *Data Validation & Caveats:* `Nitrate (mg/l)` reaches $0.000$; requires denominator smoothing and handling of near-zero values.
 3. **Candidate Organic Nitrogen Fraction:**
-   - *Candidate Formula:* $[	ext{Nitrogen}] - ([	ext{Nitrate}] + [	ext{Ammonia}])$
+   - *Candidate Formula:* $[\text{Nitrogen}] - ([\text{Nitrate}] + [\text{Ammonia}])$
    - *Scientific Interpretation:* Attempts to approximate the organic nitrogen fraction by subtracting inorganic forms from total nitrogen.
-   - *Data Validation & Caveats:* While units are consistent ($	ext{mg/l}$), independent laboratory assay errors can cause the sum of inorganic components to exceed total nitrogen, producing negative values. Truncating or clipping these values alters sensor error structures and must be validated empirically during feature selection.
+   - *Data Validation & Caveats:* While units are consistent ($\text{mg/l}$), independent laboratory assay errors can cause the sum of inorganic components to exceed total nitrogen, producing negative values. Truncating or clipping these values alters sensor error structures and must be validated empirically during feature selection.
 4. **Non-Linear Skewness Transformations:**
    - *Evidence from EDA:* `Ammonia (mg/l)` exhibits skewness of $11.98$ (kurtosis $221.7$), and `Biochemical Oxygen Demand (mg/l)` exhibits skewness of $10.21$.
    - *Transform:* $\log(1 + \max(0, x))$. Truncating at zero is computationally necessary to prevent `NaN` values under $\log(1+x)$ caused by isolated negative sensor records.
 5. **Spatiotemporal Features:**
-   - *Cyclic Date Encoding:* Transforming `Date` into $\sin(2\pi \cdot 	ext{day}/365)$ and $\cos(2\pi \cdot 	ext{day}/365)$ models seasonal hydrological cycles.
+   - *Cyclic Date Encoding:* Transforming `Date` into $\sin(2\pi \cdot \text{day}/365)$ and $\cos(2\pi \cdot \text{day}/365)$ models seasonal hydrological cycles.
    - *Station Aggregations:* Per-site historical averages (`Area`) must be computed **strictly on training observations** to prevent data leakage.
 
 ### 5.2 Taxonomy of Data Leakage
@@ -206,7 +205,7 @@ The documented schema consists of:
 
 - **Direct Label Leakage:** Feeding variables that are direct post-hoc transformations of the target (e.g., passing `CCME_WQI` into $X$, exposing target intervals).
 - **Target Formula Inversion Leakage:** Feeding the exact 8 chemical/physical parameters that calculate `CCME_Values`.
-  - *Temperature Verification:* `Temperature (cel)` **is an active contributing input** to the Ireland CCME formula (threshold = 25.0 °C) as documented in `docs/target_definition.md`. It cannot be classified as a non-contributing feature.
+  - *Temperature Status (Upstream-Documented, Not Independently Reproduced):* In `docs/target_definition.md` (citing the upstream harmonization notebook), `Temperature (cel)` is documented as an active formula-contributing parameter under Ireland guidelines with a standard threshold of $25.0\ ^\circ\text{C}$. Because the raw dataset (`data/raw/Combined_dataset.csv`, currently an unpopulated Git LFS pointer) and the upstream notebook (`Data_Processing_Harmonization.ipynb`) cannot be executed locally, this threshold and its exact mathematical contribution have not been independently reproduced. However, per repository documentation, it is an intended formula input, meaning it cannot be treated as a non-contributing feature for independent environmental prediction under Regime 2. It remains classified as an upstream-documented contributing input.
   - *Non-contributing features* are restricted strictly to metadata and spatiotemporal covariates (`Country`, `Area`, `Waterbody Type`, `Date`).
 - **Preprocessing Leakage:** Computing summary statistics (medians, scalers) over combined train and test sets (Kaufman et al., 2012). Preprocessing must be fitted strictly on $X_{train}$.
 - **Spatiotemporal Validation Leakage:** Random cross-validation on autocorrelated time-series or station records, causing models to interpolate known local readings rather than generalizing (Roberts et al., 2017).
@@ -234,7 +233,7 @@ To address these concerns transparently, our Phase 1 experimental architecture i
 
 - **Proposed Regime 1 (Formula Emulation Benchmark):**
   - *Design:* Train Random Forest and XGBoost using the 8 chemical/physical variables documented as formula contributors (`Ammonia`, `BOD`, `DO`, `Orthophosphate`, `pH`, `Temperature`, `Nitrogen`, `Nitrate`).
-  - *Prerequisite:* Execution is conditional on confirming the upstream target-generation formula and verifying that the dataset reproduces the CCME calculations.
+  - *Prerequisite:* Execution is conditional on confirming the upstream target-generation formula and verifying that the dataset reproduces the CCME calculations (including resolving the provisional single-row $F_2 \equiv F_1$ adaptation and the upstream zero reconstruction error claim).
   - *Objective:* Benchmark the capacity of tree ensembles to approximate the non-linear piecewise CCME geometric distance equation.
 - **Proposed Regime 2 (Independent Environmental Prediction Benchmark):**
   - *Design:* Exclude all 8 formula-contributing chemical inputs. Train models using strictly non-contributing metadata and spatiotemporal covariates (`Country`, `Area`, `Waterbody Type`, and seasonal date transformations).
@@ -264,4 +263,4 @@ Every scientific citation in this review is mapped to verified bibliographic rec
 - **Roberts, D. R., Bahn, V., Ciuti, S., Boyce, M. S., Elith, J., Guillera-Arroita, G., Hauenstein, S., Lahoz-Monfort, J. J., Schröder, B., Thuiller, W., & Warton, D. I. (2017).** Cross-validation strategies for data with temporal, spatial, hierarchical or phylogenetic structure. *Ecography*, 40(8), 913–929. [DOI: 10.1111/ecog.02881](https://doi.org/10.1111/ecog.02881).
 - **Strobl, C., Boulesteix, A.-L., Zeileis, A., & Hothorn, T. (2007).** Bias in random forest variable importance measures: Illustrations, sources and a solution. *BMC Bioinformatics*, 8(1), 25. [DOI: 10.1186/1471-2105-8-25](https://doi.org/10.1186/1471-2105-8-25).
 - **Tyralis, H., Papacharalampous, G., & Langousis, A. (2019).** A Brief Review of Random Forests for Water Scientists and Practitioners and Their Recent History in Water Resources. *Water*, 11(5), 910. [DOI: 10.3390/w11050910](https://doi.org/10.3390/w11050910).
-- **Water Quality Research Group. (2024).** *Combined Harmonized Surface-Water Quality Dataset with CCME WQI*. Figshare. [DOI: 10.6084/m9.figshare.27800394](https://doi.org/10.6084/m9.figshare.27800394).
+- **Water Quality Research Group. (2024).** *Combined Harmonized Surface-Water Quality Dataset with CCME WQI*. Figshare. [DOI: 10.6084/m9.figshare.27800394](https://doi.org/10.6084/m9.figshare.27800394). Licensed under CC BY 4.0.
