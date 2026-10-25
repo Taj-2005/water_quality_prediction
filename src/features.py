@@ -94,18 +94,29 @@ REGIME_1_ALLOWED_FEATURES: list[str] = REGIME_1_ALL_CHEMICALS + REGIME_2_ALLOWED
 # Forbidden across ALL regimes
 FORBIDDEN_LEAKAGE_COLUMNS: list[str] = [
     TARGET_COLUMN,  # "CCME_Values"
-    "CCME_WQI",     # Direct label leakage
-    "Area",         # Spatial grouping key
+    "CCME_WQI",  # Direct label leakage
+    "Area",  # Spatial grouping key
 ]
 
 # CCME WQI Target-Formula Components (strictly forbidden across ALL regimes)
 FORMULA_COMPONENT_LEAKAGE_COLUMNS: list[str] = [
-    "F1", "F2", "F3",
-    "f1", "f2", "f3",
-    "Scope", "Frequency", "Amplitude",
-    "scope", "frequency", "amplitude",
-    "excursion", "excursions", "nse",
-    "failed_variables", "failed_tests",
+    "F1",
+    "F2",
+    "F3",
+    "f1",
+    "f2",
+    "f3",
+    "Scope",
+    "Frequency",
+    "Amplitude",
+    "scope",
+    "frequency",
+    "amplitude",
+    "excursion",
+    "excursions",
+    "nse",
+    "failed_variables",
+    "failed_tests",
 ]
 
 
@@ -191,7 +202,10 @@ def build_features(
             out["Organic_N_fraction"] = np.where(any_na, np.nan, np.clip(org_frac, 0.0, 1.0))
 
         # Oxygen Stress / Organic Load Index: max(0, BOD) / max(0.01, DO)
-        if "Biochemical Oxygen Demand (mg/l)" in out.columns and "Dissolved Oxygen (mg/l)" in out.columns:
+        if (
+            "Biochemical Oxygen Demand (mg/l)" in out.columns
+            and "Dissolved Oxygen (mg/l)" in out.columns
+        ):
             bod = out["Biochemical Oxygen Demand (mg/l)"]
             do = out["Dissolved Oxygen (mg/l)"]
             denom = np.maximum(MIN_DO_FLOOR, do.fillna(0.0))
@@ -275,12 +289,18 @@ def attach_temporal_features(
 
     # Case 1: Date column already present in df
     if "Date_parsed" in out.columns or "Date" in out.columns:
-        return build_features(out, include_ratios=False, include_logs=False, include_temporal=True, inplace=True)
+        return build_features(
+            out, include_ratios=False, include_logs=False, include_temporal=True, inplace=True
+        )
 
     # Case 2: Explicit date_source passed
     if date_source is not None:
         if isinstance(date_source, pd.DataFrame):
-            col = "Date_parsed" if "Date_parsed" in date_source.columns else ("Date" if "Date" in date_source.columns else date_source.columns[0])
+            col = (
+                "Date_parsed"
+                if "Date_parsed" in date_source.columns
+                else ("Date" if "Date" in date_source.columns else date_source.columns[0])
+            )
             dates = date_source.loc[out.index, col]
         else:
             dates = date_source.loc[out.index]
@@ -451,9 +471,18 @@ def get_regime_splits(
 
     if regime == 1:
         # Build derived hydrochemical features
-        X_train = build_features(X_train, include_ratios=include_ratios, include_logs=include_logs, include_temporal=False)
-        X_val = build_features(X_val, include_ratios=include_ratios, include_logs=include_logs, include_temporal=False)
-        X_test = build_features(X_test, include_ratios=include_ratios, include_logs=include_logs, include_temporal=False)
+        X_train = build_features(
+            X_train,
+            include_ratios=include_ratios,
+            include_logs=include_logs,
+            include_temporal=False,
+        )
+        X_val = build_features(
+            X_val, include_ratios=include_ratios, include_logs=include_logs, include_temporal=False
+        )
+        X_test = build_features(
+            X_test, include_ratios=include_ratios, include_logs=include_logs, include_temporal=False
+        )
 
         # Attach temporal features using the cached date series
         if include_temporal:
@@ -464,9 +493,15 @@ def get_regime_splits(
         # Apply ablation masking if requested
         if partial_scenario is not None and partial_scenario != "8/8":
             deps = dict(CHEMICAL_FEATURE_DEPENDENCIES)
-            X_train = mask_features(X_train, available_measurements=partial_scenario, feature_dependencies=deps)
-            X_val = mask_features(X_val, available_measurements=partial_scenario, feature_dependencies=deps)
-            X_test = mask_features(X_test, available_measurements=partial_scenario, feature_dependencies=deps)
+            X_train = mask_features(
+                X_train, available_measurements=partial_scenario, feature_dependencies=deps
+            )
+            X_val = mask_features(
+                X_val, available_measurements=partial_scenario, feature_dependencies=deps
+            )
+            X_test = mask_features(
+                X_test, available_measurements=partial_scenario, feature_dependencies=deps
+            )
 
         X_train = select_regime_features(X_train, regime=1, include_temporal=include_temporal)
         X_val = select_regime_features(X_val, regime=1, include_temporal=include_temporal)

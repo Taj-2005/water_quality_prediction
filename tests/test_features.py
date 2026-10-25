@@ -57,29 +57,35 @@ def make_test_df(n: int = 10) -> pd.DataFrame:
 
 class TestMathematicalCorrectness:
     def test_n_p_ratio_formula(self):
-        df = pd.DataFrame({
-            "Nitrogen (mg/l)": [10.0],
-            "Orthophosphate (mg/l)": [0.1],
-        })
+        df = pd.DataFrame(
+            {
+                "Nitrogen (mg/l)": [10.0],
+                "Orthophosphate (mg/l)": [0.1],
+            }
+        )
         out = build_features(df, include_logs=False, include_temporal=False)
         expected = 10.0 / (0.1 + EPSILON)
         assert np.isclose(out.loc[0, "N_P_ratio"], expected)
 
     def test_inorganic_n_ratio_formula(self):
-        df = pd.DataFrame({
-            "Ammonia (mg/l)": [0.5],
-            "Nitrate (mg/l)": [4.5],
-        })
+        df = pd.DataFrame(
+            {
+                "Ammonia (mg/l)": [0.5],
+                "Nitrate (mg/l)": [4.5],
+            }
+        )
         out = build_features(df, include_logs=False, include_temporal=False)
         expected = 0.5 / (4.5 + EPSILON)
         assert np.isclose(out.loc[0, "Inorganic_N_ratio"], expected)
 
     def test_organic_n_estimate_and_fraction_formulas(self):
-        df = pd.DataFrame({
-            "Nitrogen (mg/l)": [10.0],
-            "Nitrate (mg/l)": [4.0],
-            "Ammonia (mg/l)": [1.0],
-        })
+        df = pd.DataFrame(
+            {
+                "Nitrogen (mg/l)": [10.0],
+                "Nitrate (mg/l)": [4.0],
+                "Ammonia (mg/l)": [1.0],
+            }
+        )
         out = build_features(df, include_logs=False, include_temporal=False)
         # TN (10.0) - DIN (4.0 + 1.0 = 5.0) = 5.0 mg/l
         assert np.isclose(out.loc[0, "Organic_N_estimate"], 5.0)
@@ -89,30 +95,36 @@ class TestMathematicalCorrectness:
         assert 0.0 <= out.loc[0, "Organic_N_fraction"] <= 1.0
 
     def test_bod_do_ratio_formula(self):
-        df = pd.DataFrame({
-            "Biochemical Oxygen Demand (mg/l)": [6.0],
-            "Dissolved Oxygen (mg/l)": [12.0],
-        })
+        df = pd.DataFrame(
+            {
+                "Biochemical Oxygen Demand (mg/l)": [6.0],
+                "Dissolved Oxygen (mg/l)": [12.0],
+            }
+        )
         out = build_features(df, include_logs=False, include_temporal=False)
         assert np.isclose(out.loc[0, "BOD_DO_ratio"], 6.0 / 12.0)
 
     def test_log_transforms_formula(self):
-        df = pd.DataFrame({
-            "Ammonia (mg/l)": [0.0, np.e - 1.0],
-            "Biochemical Oxygen Demand (mg/l)": [1.0, 9.0],
-            "Orthophosphate (mg/l)": [0.5, 3.0],
-            "Nitrate (mg/l)": [0.0, 7.0],
-            "Nitrogen (mg/l)": [2.0, 5.0],
-        })
+        df = pd.DataFrame(
+            {
+                "Ammonia (mg/l)": [0.0, np.e - 1.0],
+                "Biochemical Oxygen Demand (mg/l)": [1.0, 9.0],
+                "Orthophosphate (mg/l)": [0.5, 3.0],
+                "Nitrate (mg/l)": [0.0, 7.0],
+                "Nitrogen (mg/l)": [2.0, 5.0],
+            }
+        )
         out = build_features(df, include_ratios=False, include_temporal=False)
         assert np.isclose(out.loc[0, "log_Ammonia"], 0.0)
         assert np.isclose(out.loc[1, "log_Ammonia"], 1.0)
         assert np.isclose(out.loc[0, "log_BOD"], np.log1p(1.0))
 
     def test_temporal_cyclic_encoding(self):
-        df = pd.DataFrame({
-            "Date": ["01-01-2020", "02-07-2020"],
-        })
+        df = pd.DataFrame(
+            {
+                "Date": ["01-01-2020", "02-07-2020"],
+            }
+        )
         out = build_features(df, include_ratios=False, include_logs=False)
         assert "sin_day" in out.columns
         assert "cos_day" in out.columns
@@ -125,14 +137,16 @@ class TestMathematicalCorrectness:
 
 class TestMissingValueHandling:
     def test_nan_inputs_propagate_to_nan_derived(self):
-        df = pd.DataFrame({
-            "Ammonia (mg/l)": [np.nan, 1.0],
-            "Nitrate (mg/l)": [5.0, np.nan],
-            "Nitrogen (mg/l)": [np.nan, 10.0],
-            "Orthophosphate (mg/l)": [0.1, np.nan],
-            "Biochemical Oxygen Demand (mg/l)": [np.nan, 4.0],
-            "Dissolved Oxygen (mg/l)": [10.0, np.nan],
-        })
+        df = pd.DataFrame(
+            {
+                "Ammonia (mg/l)": [np.nan, 1.0],
+                "Nitrate (mg/l)": [5.0, np.nan],
+                "Nitrogen (mg/l)": [np.nan, 10.0],
+                "Orthophosphate (mg/l)": [0.1, np.nan],
+                "Biochemical Oxygen Demand (mg/l)": [np.nan, 4.0],
+                "Dissolved Oxygen (mg/l)": [10.0, np.nan],
+            }
+        )
         out = build_features(df, include_temporal=False)
 
         assert np.isnan(out.loc[0, "Inorganic_N_ratio"])
@@ -151,14 +165,16 @@ class TestMissingValueHandling:
 
 class TestNumericalSafetyAndSensorNoise:
     def test_zero_denominator_safely_bounded(self):
-        df = pd.DataFrame({
-            "Nitrogen (mg/l)": [10.0],
-            "Orthophosphate (mg/l)": [0.0],
-            "Ammonia (mg/l)": [2.0],
-            "Nitrate (mg/l)": [0.0],
-            "Biochemical Oxygen Demand (mg/l)": [5.0],
-            "Dissolved Oxygen (mg/l)": [0.0],
-        })
+        df = pd.DataFrame(
+            {
+                "Nitrogen (mg/l)": [10.0],
+                "Orthophosphate (mg/l)": [0.0],
+                "Ammonia (mg/l)": [2.0],
+                "Nitrate (mg/l)": [0.0],
+                "Biochemical Oxygen Demand (mg/l)": [5.0],
+                "Dissolved Oxygen (mg/l)": [0.0],
+            }
+        )
         out = build_features(df, include_logs=False, include_temporal=False)
 
         assert not np.isinf(out["N_P_ratio"]).any()
@@ -167,14 +183,16 @@ class TestNumericalSafetyAndSensorNoise:
         assert out.loc[0, "BOD_DO_ratio"] == 5.0 / MIN_DO_FLOOR
 
     def test_negative_sensor_drift_clipped(self):
-        df = pd.DataFrame({
-            "Ammonia (mg/l)": [-0.005],
-            "Biochemical Oxygen Demand (mg/l)": [-2.0],
-            "Orthophosphate (mg/l)": [-0.004],
-            "Nitrogen (mg/l)": [5.0],
-            "Nitrate (mg/l)": [10.0],
-            "Dissolved Oxygen (mg/l)": [8.0],
-        })
+        df = pd.DataFrame(
+            {
+                "Ammonia (mg/l)": [-0.005],
+                "Biochemical Oxygen Demand (mg/l)": [-2.0],
+                "Orthophosphate (mg/l)": [-0.004],
+                "Nitrogen (mg/l)": [5.0],
+                "Nitrate (mg/l)": [10.0],
+                "Dissolved Oxygen (mg/l)": [8.0],
+            }
+        )
         out = build_features(df, include_temporal=False)
 
         assert out.loc[0, "log_Ammonia"] == 0.0
@@ -184,20 +202,24 @@ class TestNumericalSafetyAndSensorNoise:
         assert out.loc[0, "N_P_ratio"] >= 0.0
 
     def test_din_exceeding_tn_clips_organic_estimate_and_fraction_at_zero(self):
-        df = pd.DataFrame({
-            "Nitrogen (mg/l)": [5.0],
-            "Nitrate (mg/l)": [6.0],
-            "Ammonia (mg/l)": [2.0],  # DIN = 8.0 > TN = 5.0
-        })
+        df = pd.DataFrame(
+            {
+                "Nitrogen (mg/l)": [5.0],
+                "Nitrate (mg/l)": [6.0],
+                "Ammonia (mg/l)": [2.0],  # DIN = 8.0 > TN = 5.0
+            }
+        )
         out = build_features(df, include_logs=False, include_temporal=False)
         assert out.loc[0, "Organic_N_estimate"] == 0.0
         assert out.loc[0, "Organic_N_fraction"] == 0.0
 
     def test_sub_zero_temperature_preserved_without_corruption(self):
-        df = pd.DataFrame({
-            "Temperature (cel)": [-5.26, 0.0, 18.5],
-            "Date": ["10-01-2010", "15-01-2010", "20-07-2010"],
-        })
+        df = pd.DataFrame(
+            {
+                "Temperature (cel)": [-5.26, 0.0, 18.5],
+                "Date": ["10-01-2010", "15-01-2010", "20-07-2010"],
+            }
+        )
         out = build_features(df, include_ratios=False, include_logs=False, include_temporal=True)
         assert out.loc[0, "Temperature (cel)"] == -5.26
         assert "sin_day" in out.columns
@@ -205,10 +227,13 @@ class TestNumericalSafetyAndSensorNoise:
 
 class TestTemporalFeatureAttachment:
     def test_attach_temporal_features_with_explicit_date_source(self):
-        df = pd.DataFrame({
-            "Country": ["England", "USA"],
-            "Waterbody Type": ["River", "Lake"],
-        }, index=[100, 200])
+        df = pd.DataFrame(
+            {
+                "Country": ["England", "USA"],
+                "Waterbody Type": ["River", "Lake"],
+            },
+            index=[100, 200],
+        )
         dates = pd.Series(["15-03-2021", "20-09-2021"], index=[100, 200])
 
         out = attach_temporal_features(df, date_source=dates)
@@ -219,34 +244,40 @@ class TestTemporalFeatureAttachment:
         assert out.loc[200, "month"] == 9.0
 
     def test_attach_temporal_features_idempotent(self):
-        df = pd.DataFrame({
-            "Country": ["England"],
-            "sin_day": [0.5],
-            "cos_day": [0.5],
-            "month": [6.0],
-        })
+        df = pd.DataFrame(
+            {
+                "Country": ["England"],
+                "sin_day": [0.5],
+                "cos_day": [0.5],
+                "month": [6.0],
+            }
+        )
         out = attach_temporal_features(df)
         assert out is df
 
 
 class TestRegimeSeparationAndGovernance:
     def test_regime_2_raises_on_raw_chemical_measurement(self):
-        df = pd.DataFrame({
-            "Country": ["England"],
-            "Waterbody Type": ["River"],
-            "Ammonia (mg/l)": [0.5],
-            "sin_day": [0.1],
-        })
+        df = pd.DataFrame(
+            {
+                "Country": ["England"],
+                "Waterbody Type": ["River"],
+                "Ammonia (mg/l)": [0.5],
+                "sin_day": [0.1],
+            }
+        )
         with pytest.raises(ValueError, match="CRITICAL LEAKAGE: Chemical features"):
             validate_regime(df, regime=2)
 
     def test_regime_2_raises_on_derived_chemical_feature(self):
-        df = pd.DataFrame({
-            "Country": ["England"],
-            "Waterbody Type": ["River"],
-            "N_P_ratio": [15.2],
-            "sin_day": [0.1],
-        })
+        df = pd.DataFrame(
+            {
+                "Country": ["England"],
+                "Waterbody Type": ["River"],
+                "N_P_ratio": [15.2],
+                "sin_day": [0.1],
+            }
+        )
         with pytest.raises(ValueError, match="CRITICAL LEAKAGE: Chemical features"):
             validate_regime(df, regime=2)
 
@@ -255,7 +286,13 @@ class TestRegimeSeparationAndGovernance:
         X_all = build_features(df, include_ratios=True, include_logs=True, include_temporal=True)
 
         X_regime2 = select_regime_features(X_all, regime=2)
-        assert set(X_regime2.columns) == {"Country", "Waterbody Type", "sin_day", "cos_day", "month"}
+        assert set(X_regime2.columns) == {
+            "Country",
+            "Waterbody Type",
+            "sin_day",
+            "cos_day",
+            "month",
+        }
 
         for col in REGIME_2_PROHIBITED_FEATURES:
             assert col not in X_regime2.columns
@@ -291,7 +328,15 @@ class TestRegimeSeparationAndGovernance:
                 validate_regime(df, regime=2)
 
     def test_validate_regime_rejects_excursions_and_nse(self):
-        for col in ["excursion", "excursions", "excursion_Ammonia", "nse", "failed_variables", "Scope", "Amplitude"]:
+        for col in [
+            "excursion",
+            "excursions",
+            "excursion_Ammonia",
+            "nse",
+            "failed_variables",
+            "Scope",
+            "Amplitude",
+        ]:
             df = pd.DataFrame({col: [1.5], "Country": ["England"]})
             with pytest.raises(ValueError, match="Target-formula component"):
                 validate_regime(df, regime=1)
@@ -367,20 +412,26 @@ class TestSklearnTransformerInterface:
         validate_regime(out, regime=2)
 
     def test_transformer_enforces_contract_when_dates_missing(self):
-        df_no_dates = pd.DataFrame({
-            "Country": ["England"],
-            "Waterbody Type": ["River"],
-        }, index=[999999999])  # Index not in clean dataset
+        df_no_dates = pd.DataFrame(
+            {
+                "Country": ["England"],
+                "Waterbody Type": ["River"],
+            },
+            index=[999999999],
+        )  # Index not in clean dataset
 
         fe = WaterQualityFeatureEngineer(regime=2, include_temporal=True)
         with pytest.raises(ValueError, match="WaterQualityFeatureEngineer contract violation"):
             fe.transform(df_no_dates)
 
     def test_transformer_accepts_explicit_date_source_when_dates_missing(self):
-        df_no_dates = pd.DataFrame({
-            "Country": ["England", "USA"],
-            "Waterbody Type": ["River", "Lake"],
-        }, index=[501, 502])
+        df_no_dates = pd.DataFrame(
+            {
+                "Country": ["England", "USA"],
+                "Waterbody Type": ["River", "Lake"],
+            },
+            index=[501, 502],
+        )
         dates = pd.Series(["10-04-2022", "12-08-2022"], index=[501, 502])
 
         fe = WaterQualityFeatureEngineer(regime=2, include_temporal=True, date_source=dates)
