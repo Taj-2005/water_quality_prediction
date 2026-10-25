@@ -19,6 +19,9 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import pytest
+
+pytest.importorskip("sklearn", reason="scikit-learn is required for Random Forest tests")
+
 from sklearn.ensemble import RandomForestRegressor
 
 from src.models_rf import (
@@ -55,6 +58,36 @@ class TestMetricFallback:
             metrics = compute_metrics([10.0, 20.0], [12.0, 22.0])
             assert metrics["mae"] == 2.0
             assert metrics["rmse"] == 2.0
+
+    def test_compute_metrics_constant_target(self):
+        y_true = np.array([50.0, 50.0, 50.0])
+        # Perfect predictions on constant target -> R2 = 1.0
+        metrics_exact = compute_metrics(y_true, np.array([50.0, 50.0, 50.0]))
+        assert np.isclose(metrics_exact["mae"], 0.0)
+        assert np.isclose(metrics_exact["rmse"], 0.0)
+        assert np.isclose(metrics_exact["r2"], 1.0)
+
+        # Imperfect predictions on constant target -> R2 = 0.0
+        metrics_diff = compute_metrics(y_true, np.array([51.0, 49.0, 50.0]))
+        assert np.isclose(metrics_diff["r2"], 0.0)
+
+    def test_compute_metrics_pure_numpy_fallback(self):
+        with patch("src.models_rf.HAS_SKLEARN", False):
+            # Perfect predictions on constant target
+            metrics_exact = compute_metrics([50.0, 50.0, 50.0], [50.0, 50.0, 50.0])
+            assert np.isclose(metrics_exact["mae"], 0.0)
+            assert np.isclose(metrics_exact["rmse"], 0.0)
+            assert np.isclose(metrics_exact["r2"], 1.0)
+
+            # Imperfect on constant target
+            metrics_diff = compute_metrics([50.0, 50.0, 50.0], [52.0, 48.0, 50.0])
+            assert np.isclose(metrics_diff["r2"], 0.0)
+
+            # Known regression errors
+            metrics_reg = compute_metrics([10.0, 20.0, 30.0], [12.0, 18.0, 32.0])
+            assert np.isclose(metrics_reg["mae"], 2.0)
+            assert np.isclose(metrics_reg["rmse"], 2.0)
+            assert np.isclose(metrics_reg["r2"], 0.94)
 
 
 class TestCategoricalEncoder:

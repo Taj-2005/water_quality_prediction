@@ -30,9 +30,20 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.preprocessing import OneHotEncoder
+
+try:
+    from sklearn.ensemble import RandomForestRegressor
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+    from sklearn.preprocessing import OneHotEncoder
+
+    HAS_SKLEARN = True
+except ImportError:  # pragma: no cover
+    RandomForestRegressor = None  # type: ignore[assignment, misc]
+    mean_absolute_error = None  # type: ignore[assignment]
+    mean_squared_error = None  # type: ignore[assignment]
+    r2_score = None  # type: ignore[assignment]
+    OneHotEncoder = None  # type: ignore[assignment, misc]
+    HAS_SKLEARN = False
 
 from src.config import REPORTS, SEED
 from src.evaluate_api import evaluate, get_splits
@@ -60,9 +71,20 @@ def compute_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
     except (NotImplementedError, ImportError):
         y_t = np.asarray(y_true, dtype=float)
         y_p = np.asarray(y_pred, dtype=float)
-        mae = float(mean_absolute_error(y_t, y_p))
-        rmse = float(np.sqrt(mean_squared_error(y_t, y_p)))
-        r2 = float(r2_score(y_t, y_p))
+        if HAS_SKLEARN and mean_absolute_error is not None:
+            mae = float(mean_absolute_error(y_t, y_p))
+            rmse = float(np.sqrt(mean_squared_error(y_t, y_p)))
+            r2 = float(r2_score(y_t, y_p))
+        else:
+            mae = float(np.mean(np.abs(y_t - y_p)))
+            mse = float(np.mean((y_t - y_p) ** 2))
+            rmse = float(np.sqrt(mse))
+            ss_res = float(np.sum((y_t - y_p) ** 2))
+            ss_tot = float(np.sum((y_t - np.mean(y_t)) ** 2))
+            if ss_tot > 0:
+                r2 = float(1.0 - (ss_res / ss_tot))
+            else:
+                r2 = 1.0 if ss_res == 0.0 else 0.0
         return {"mae": mae, "rmse": rmse, "r2": r2}
 
 
@@ -88,6 +110,11 @@ class CategoricalEncoder:
         self.num_cols_ = [c for c in X.columns if c not in self.cat_cols_]
 
         if self.cat_cols_:
+            if not HAS_SKLEARN or OneHotEncoder is None:
+                raise ImportError(
+                    "CategoricalEncoder requires scikit-learn. "
+                    "Install dependencies with: pip install -r requirements.txt"
+                )
             self.encoder_ = OneHotEncoder(
                 sparse_output=False,
                 handle_unknown="ignore",
@@ -322,6 +349,12 @@ def train(
         Dictionary containing fitted model, encoder, best params, validation metrics,
         final test metrics, feature names, feature importances, and run configuration.
     """
+    if not HAS_SKLEARN or RandomForestRegressor is None:
+        raise ImportError(
+            "Random Forest modeling requires scikit-learn. "
+            "Install dependencies with: pip install -r requirements.txt"
+        )
+
     # 1. Load data via shared pipeline APIs
     X_train, X_val, X_test, y_train, y_val, y_test = load_rf_splits(
         regime=regime,
