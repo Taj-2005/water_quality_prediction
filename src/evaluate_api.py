@@ -14,8 +14,8 @@ Downstream implementations land in:
 from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
 
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype

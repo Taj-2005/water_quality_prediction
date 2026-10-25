@@ -13,14 +13,14 @@ Verifies:
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from src.clean import MEASUREMENTS
 from src.preprocess import (
-    DEFAULT_FEATURE_DEPENDENCIES,
-    PARTIAL_SCENARIOS,
     PRIMARY_MEASUREMENTS,
     WaterQualityPreprocessor,
     extract_features_target,

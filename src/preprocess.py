@@ -14,16 +14,28 @@ Provides:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, TransformerMixin
+
+try:
+    from sklearn.base import BaseEstimator, TransformerMixin
+except ImportError:
+
+    class BaseEstimator:
+        pass
+
+    class TransformerMixin:
+        def fit_transform(self, X, y=None, **fit_params):
+            return self.fit(X, y, **fit_params).transform(X)
+
 
 from src.clean import MEASUREMENTS
 from src.config import TARGET_COLUMN
-from src.split import get_split_data, load_splits
+from src.split import get_split_data
 
 # Approved feature sets
 PRIMARY_MEASUREMENTS = list(MEASUREMENTS)
@@ -33,8 +45,8 @@ METADATA_FEATURES = ["Country", "Waterbody Type"]
 EXCLUDED_COLUMNS = [
     TARGET_COLUMN,
     "CCME_WQI",  # Post-hoc binned target label (direct label leakage)
-    "Area",      # Monitoring station ID (grouping key, prevents site memorization)
-    "Date",      # Raw string date
+    "Area",  # Monitoring station ID (grouping key, prevents site memorization)
+    "Date",  # Raw string date
     "Date_parsed",
 ]
 
@@ -105,7 +117,13 @@ def validate_no_leakage(
         )
 
     if not allow_imputation_flags:
-        leak_flags = [c for c in cols if c.endswith("__imputed_upstream") or c == "n_imputed_upstream" or c == "flag_any_imputed_upstream"]
+        leak_flags = [
+            c
+            for c in cols
+            if c.endswith("__imputed_upstream")
+            or c == "n_imputed_upstream"
+            or c == "flag_any_imputed_upstream"
+        ]
         if leak_flags:
             raise ValueError(
                 f"Upstream imputation flags found in primary feature matrix: {leak_flags}. "
@@ -215,7 +233,8 @@ class WaterQualityPreprocessor(BaseEstimator, TransformerMixin):
             flag_cols = [
                 c
                 for c in df.columns
-                if c.endswith("__imputed_upstream") or c in ("n_imputed_upstream", "flag_any_imputed_upstream")
+                if c.endswith("__imputed_upstream")
+                or c in ("n_imputed_upstream", "flag_any_imputed_upstream")
             ]
             cols.extend(flag_cols)
 
@@ -231,9 +250,7 @@ class WaterQualityPreprocessor(BaseEstimator, TransformerMixin):
         self.numeric_columns_ = [
             c for c in selected_cols if pd.api.types.is_numeric_dtype(sub_X[c])
         ]
-        self.categorical_columns_ = [
-            c for c in selected_cols if c not in self.numeric_columns_
-        ]
+        self.categorical_columns_ = [c for c in selected_cols if c not in self.numeric_columns_]
 
         # Learn train medians (for fallback imputation)
         for col in self.numeric_columns_:
@@ -258,7 +275,9 @@ class WaterQualityPreprocessor(BaseEstimator, TransformerMixin):
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """Apply train-fitted transformations to val, test, or inference data."""
         if not self.is_fitted_:
-            raise RuntimeError("WaterQualityPreprocessor must be fit on X_train before transform().")
+            raise RuntimeError(
+                "WaterQualityPreprocessor must be fit on X_train before transform()."
+            )
 
         validate_no_leakage(X, allow_imputation_flags=self.include_imputation_flags)
 

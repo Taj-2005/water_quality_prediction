@@ -67,9 +67,7 @@ def make_grouped_split(
         Series with index matching ``df.index``, values in {'train', 'val', 'test'}.
     """
     if not np.isclose(train_frac + val_frac + test_frac, 1.0):
-        raise ValueError(
-            f"Fractions must sum to 1.0, got {train_frac} + {val_frac} + {test_frac}"
-        )
+        raise ValueError(f"Fractions must sum to 1.0, got {train_frac} + {val_frac} + {test_frac}")
 
     rng = np.random.default_rng(seed)
 
@@ -150,22 +148,30 @@ def validate_splits(
     area_leak_train_test = train_areas.intersection(test_areas)
     area_leak_val_test = val_areas.intersection(test_areas)
 
-    assert not area_leak_train_val, f"Area leakage between train and val: {len(area_leak_train_val)} areas"
-    assert not area_leak_train_test, f"Area leakage between train and test: {len(area_leak_train_test)} areas"
-    assert not area_leak_val_test, f"Area leakage between val and test: {len(area_leak_val_test)} areas"
+    assert not area_leak_train_val, (
+        f"Area leakage between train and val: {len(area_leak_train_val)} areas"
+    )
+    assert not area_leak_train_test, (
+        f"Area leakage between train and test: {len(area_leak_train_test)} areas"
+    )
+    assert not area_leak_val_test, (
+        f"Area leakage between val and test: {len(area_leak_val_test)} areas"
+    )
 
     # 3. Target verification
     if target_col in df.columns:
         for s in ["train", "val", "test"]:
             sub_y = df.loc[splits == s, target_col]
             if len(sub_y) > 0:
-                assert sub_y.notna().any(), f"Target column '{target_col}' has no valid values in {s}"
+                assert sub_y.notna().any(), (
+                    f"Target column '{target_col}' has no valid values in {s}"
+                )
 
     # 4. Proportions check
     props = splits.value_counts(normalize=True).to_dict()
-    assert (
-        min_train_frac <= props.get("train", 0.0) <= max_train_frac
-    ), f"Train proportion {props.get('train', 0.0):.3f} outside expected [{min_train_frac}, {max_train_frac}]"
+    assert min_train_frac <= props.get("train", 0.0) <= max_train_frac, (
+        f"Train proportion {props.get('train', 0.0):.3f} outside expected [{min_train_frac}, {max_train_frac}]"
+    )
 
     return {
         "total_rows": len(df),
@@ -246,10 +252,7 @@ def get_split_indices(
     """
     splits = load_splits(splits_dir=splits_dir, df=df)
     categories = ["train", "val", "test"]
-    return {
-        cat: np.where(splits.values == cat)[0]
-        for cat in categories
-    }
+    return {cat: np.where(splits.values == cat)[0] for cat in categories}
 
 
 def get_split_data(
