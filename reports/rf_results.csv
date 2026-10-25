@@ -1,0 +1,2 @@
+timestamp,experiment_label,regime,feature_set,partial_scenario,n_train_samples,n_features,n_estimators,max_depth,min_samples_leaf,max_features,val_mae,val_rmse,val_r2,test_mae,test_rmse,test_r2,oob_score
+2026-10-25T10:47:05.976086+00:00,"surrogate_emulator_benchmark (formula approximation, NOT independent prediction)",1,engineered,8/8,100000,38,100,15,5,sqrt,0.40309296728807215,0.9075230940662179,0.99760757337322,0.40784245078341835,0.9197174376063434,0.997568035523024,0.9978964759855418
