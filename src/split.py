@@ -194,15 +194,21 @@ def save_splits(
     out_dir = Path(splits_dir) if splits_dir else DATA_SPLITS
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_file = out_dir / "splits.parquet"
+    parquet_file = out_dir / "splits.parquet"
+    csv_file = out_dir / "splits.csv"
     split_df = pd.DataFrame({"split": splits.astype("category")}, index=splits.index)
-    split_df.to_parquet(out_file, compression="zstd")
 
-    if save_csv:
-        csv_file = out_dir / "splits.csv"
+    saved_file = parquet_file
+    try:
+        split_df.to_parquet(parquet_file, compression="zstd")
+    except (ImportError, ValueError):
+        split_df.to_csv(csv_file, index=True)
+        saved_file = csv_file
+
+    if save_csv and saved_file != csv_file:
         split_df.to_csv(csv_file, index=True)
 
-    return out_file
+    return saved_file
 
 
 def load_splits(
@@ -217,16 +223,24 @@ def load_splits(
         Series mapping row indices to partition ('train', 'val', 'test').
     """
     out_dir = Path(splits_dir) if splits_dir else DATA_SPLITS
-    target = out_dir / "splits.parquet"
+    parquet_target = out_dir / "splits.parquet"
+    csv_target = out_dir / "splits.csv"
 
-    if target.exists():
-        loaded = pd.read_parquet(target)["split"]
-        if df is not None and len(loaded) != len(df):
-            raise ValueError(
-                f"Persisted split size ({len(loaded)}) does not match dataframe ({len(df)}). "
-                "Regenerate splits using make_grouped_split() or python -m src.split."
-            )
-        return loaded
+    if parquet_target.exists():
+        try:
+            loaded = pd.read_parquet(parquet_target)["split"]
+            if df is not None and len(loaded) != len(df):
+                raise ValueError(
+                    f"Persisted split size ({len(loaded)}) does not match dataframe ({len(df)}). "
+                    "Regenerate splits using make_grouped_split() or python -m src.split."
+                )
+            return loaded
+        except (ImportError, ValueError):
+            if csv_target.exists():
+                return pd.read_csv(csv_target, index_col=0)["split"].astype("category")
+            raise
+    elif csv_target.exists():
+        return pd.read_csv(csv_target, index_col=0)["split"].astype("category")
 
     if df is None:
         from src.evaluate_api import load_data
@@ -235,7 +249,7 @@ def load_splits(
 
     splits = make_grouped_split(df)
     validate_splits(df, splits)
-    save_splits(splits, out_dir)
+    save_splits(splits, out_dir, save_csv=True)
     return splits
 
 
