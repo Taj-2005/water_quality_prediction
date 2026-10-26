@@ -48,3 +48,6 @@ optuna_study/
 *.synctex.gz
 *.bbl
 *.blg
+
+# Local work plan
+Water Quality Prediction Phase 1 Work Plan.pdf
