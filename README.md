@@ -152,10 +152,17 @@ water_quality_prediction/
 │   ├── metrics.py               # MAE / RMSE / R2, or macro F1 + calibration
 │   ├── models_rf.py             # Random Forest training + tuning
 │   └── models_xgb.py            # XGBoost training + tuning
+├── results/                     # AUTHORITATIVE results - cite these (src/run_evaluation.py)
+│   ├── metrics.csv              # headline comparison of the three models
+│   ├── partial_measurement_results.csv   # the four availability regimes
+│   ├── ablation_results.csv     # engineered features, imputation flags
+│   ├── bootstrap_ci_results.csv # 95% confidence intervals
+│   ├── country_results.csv      # test error by country (China excluded: 0 test records)
+│   └── shap_importance.csv      # feature attribution
 ├── reports/
-│   ├── figures/                 # figures used in the IEEE report and deck
-│   ├── rf_results.csv           # Random Forest metrics on shared val/test
-│   └── xgb_results.csv          # XGBoost metrics + ablation
+│   ├── figures/                 # all figures for the IEEE report and deck
+│   └── *.csv                    # per-module training logs, NOT for citation
+├── report/                      # IEEE LaTeX source + compiled PDF
 ├── docs/
 │   ├── target_definition.md     # the target, its standard/index definition, leakage risks
 │   ├── data_dictionary.md       # every column: unit, meaning, source, license

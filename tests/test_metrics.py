@@ -325,3 +325,53 @@ class TestIntegration:
         assert m["mae"] > 0
         assert m["rmse"] >= m["mae"]  # RMSE ≥ MAE always
         assert m["medae"] > 0
+
+
+class TestCeilingSplitMetrics:
+    """The target is bounded at 100 with a large point mass there; pooled metrics
+    conflate identifying compliance with estimating shortfall."""
+
+    def test_groups_partition_the_records(self):
+        from src.metrics import ceiling_split_metrics
+
+        y_true = np.array([100.0, 100.0, 80.0, 60.0, 45.0])
+        m = ceiling_split_metrics(y_true, y_true.copy())
+        assert m["at_ceiling_n"] + m["below_ceiling_n"] == m["pooled_n"] == 5
+        assert m["ceiling_share"] == pytest.approx(0.4)
+
+    def test_pooled_hides_a_group_specific_failure(self):
+        from src.metrics import ceiling_split_metrics
+
+        # Perfect on the ceiling, badly wrong below it.
+        y_true = np.array([100.0, 100.0, 50.0, 50.0])
+        y_pred = np.array([100.0, 100.0, 70.0, 70.0])
+        m = ceiling_split_metrics(y_true, y_pred)
+        assert m["at_ceiling_mae"] == pytest.approx(0.0)
+        assert m["below_ceiling_mae"] == pytest.approx(20.0)
+        assert m["pooled_mae"] == pytest.approx(10.0), "pooled averages the failure away"
+
+    def test_r2_is_nan_at_the_ceiling(self):
+        """Every true value equals the bound, so total variance is zero and R2 is
+        undefined. Reporting nan is correct; reporting 0 or 1 would be an artefact."""
+        from src.metrics import ceiling_split_metrics
+
+        m = ceiling_split_metrics(np.array([100.0, 100.0]), np.array([99.0, 100.0]))
+        assert np.isnan(m["at_ceiling_r2"])
+        assert not np.isnan(m["at_ceiling_mae"])
+
+    def test_shortfall_and_overshoot_diagnostics(self):
+        from src.metrics import ceiling_split_metrics
+
+        y_true = np.array([100.0, 100.0, 60.0, 70.0])
+        y_pred = np.array([95.0, 97.0, 100.0, 65.0])
+        m = ceiling_split_metrics(y_true, y_pred)
+        assert m["at_ceiling_mean_shortfall"] == pytest.approx(4.0)
+        assert m["below_ceiling_overshoot_rate"] == pytest.approx(0.5)
+
+    def test_empty_group_does_not_raise(self):
+        from src.metrics import ceiling_split_metrics
+
+        m = ceiling_split_metrics(np.array([50.0, 60.0]), np.array([55.0, 61.0]))
+        assert m["at_ceiling_n"] == 0
+        assert np.isnan(m["at_ceiling_mae"])
+        assert not np.isnan(m["below_ceiling_mae"])

@@ -136,6 +136,88 @@ def regression_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
     }
 
 
+CEILING_VALUE = 100.0
+"""The CCME index is bounded above at 100: a record meeting every guideline gives
+F1 = F2 = F3 = 0 and therefore exactly 100. 35.92% of records sit on that bound."""
+
+
+def ceiling_split_metrics(
+    y_true: Any,
+    y_pred: Any,
+    ceiling: float = CEILING_VALUE,
+    tol: float = 1e-9,
+) -> dict[str, float]:
+    """Report regression metrics separately for records at the ceiling and below it.
+
+    The target is bounded with a large point mass at ``ceiling`` -- not censored: no
+    latent value exists above the bound, so the remedy is stratified reporting rather
+    than a censored-regression estimator. A single pooled statistic answers two
+    questions at once: whether a record is fully guideline-compliant, and how far from
+    compliance the remainder fall. Those are different tasks and a model can be good at
+    one and poor at the other.
+
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,)
+        Ground truth and predictions.
+    ceiling : float
+        The upper bound of the index. Defaults to 100.0.
+    tol : float
+        Absolute tolerance for treating a value as sitting on the bound, which guards
+        against float round-trips through CSV.
+
+    Returns
+    -------
+    dict[str, float]
+        ``pooled_*`` over all records, ``at_ceiling_*`` over records whose true value
+        is the bound, and ``below_ceiling_*`` over the rest. Each group contributes
+        mae, rmse, r2 and n. Groups with no records yield ``float("nan")`` rather than
+        raising, so the function is safe on any subset.
+
+        Also returns ``ceiling_share`` (fraction of records at the bound),
+        ``at_ceiling_mean_shortfall`` (mean predicted distance below the bound for
+        records that belong on it -- a model that systematically under-predicts
+        compliance shows up here), and ``below_ceiling_overshoot_rate`` (fraction of
+        non-ceiling records predicted at or above the bound).
+    """
+    y_true = _to_array(y_true)
+    y_pred = _to_array(y_pred)
+    _validate_lengths(y_true, y_pred)
+
+    at = np.abs(y_true - ceiling) <= tol
+    below = ~at
+
+    out: dict[str, float] = {"ceiling_share": float(at.mean()) if len(at) else float("nan")}
+
+    for name, mask in (
+        ("pooled", np.ones_like(at, dtype=bool)),
+        ("at_ceiling", at),
+        ("below_ceiling", below),
+    ):
+        n = int(mask.sum())
+        out[f"{name}_n"] = float(n)
+        if n == 0:
+            out[f"{name}_mae"] = out[f"{name}_rmse"] = out[f"{name}_r2"] = float("nan")
+            continue
+        yt, yp = y_true[mask], y_pred[mask]
+        resid = yt - yp
+        out[f"{name}_mae"] = float(np.mean(np.abs(resid)))
+        out[f"{name}_rmse"] = float(np.sqrt(np.mean(resid**2)))
+        # R2 is undefined when the group has no variance, which is exactly the case for
+        # the at-ceiling group: every true value is the bound. Report nan rather than a
+        # divide-by-zero artefact, and rely on MAE/RMSE for that group.
+        ss_tot = float(np.sum((yt - yt.mean()) ** 2))
+        out[f"{name}_r2"] = float(1.0 - np.sum(resid**2) / ss_tot) if ss_tot > 0 else float("nan")
+
+    out["at_ceiling_mean_shortfall"] = (
+        float(np.mean(ceiling - y_pred[at])) if at.any() else float("nan")
+    )
+    out["below_ceiling_overshoot_rate"] = (
+        float(np.mean(y_pred[below] >= ceiling - tol)) if below.any() else float("nan")
+    )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Classification metrics
 # ---------------------------------------------------------------------------

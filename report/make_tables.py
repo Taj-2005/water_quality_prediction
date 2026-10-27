@@ -172,13 +172,12 @@ def main() -> None:
 
     # --- error by country ------------------------------------------------------
     c = pd.read_csv(RESULTS / "country_results.csv")
-    # China's single site (Hou Bay) is allocated wholly to training, so it contributes
-    # ZERO test records. The source CSV nevertheless appends its 45,977 in-sample rows,
-    # which inflates the total past the true test size (415,804) and makes the
-    # percentage column sum to 102.31. Drop it here and say so in the caption.
-    # TODO(Parth): fix this at source in src/run_evaluation.py.
-    c = c[~c["Country"].str.startswith("China")].copy()
-    c["pct_of_total"] = 100 * c["n_samples"] / c["n_samples"].sum()
+    # China has zero test records - its single site is allocated wholly to training -
+    # and src/run_evaluation.py now writes its in-sample diagnostic to a separate file
+    # and asserts this table's percentages sum to 100. Guard anyway, cheaply.
+    assert abs(c["pct_of_total"].sum() - 100.0) < 0.01, (
+        f"country_results.csv should sum to 100%, got {c['pct_of_total'].sum():.2f}"
+    )
     t = pd.DataFrame(
         {
             "Country": short(c["Country"]),

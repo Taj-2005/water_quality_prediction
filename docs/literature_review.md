@@ -205,7 +205,7 @@ The documented schema consists of:
 
 - **Direct Label Leakage:** Feeding variables that are direct post-hoc transformations of the target (e.g., passing `CCME_WQI` into $X$, exposing target intervals).
 - **Target Formula Inversion Leakage:** Feeding the exact 8 chemical/physical parameters that calculate `CCME_Values`.
-  - *Temperature Status (Upstream-Documented, Not Independently Reproduced):* In `docs/target_definition.md` (citing the upstream harmonization notebook), `Temperature (cel)` is documented as an active formula-contributing parameter under Ireland guidelines with a standard threshold of $25.0\ ^\circ\text{C}$. Because the raw dataset (`data/raw/Combined_dataset.csv`, currently an unpopulated Git LFS pointer) and the upstream notebook (`Data_Processing_Harmonization.ipynb`) cannot be executed locally, this threshold and its exact mathematical contribution have not been independently reproduced. However, per repository documentation, it is an intended formula input, meaning it cannot be treated as a non-contributing feature for independent environmental prediction under Regime 2. It remains classified as an upstream-documented contributing input.
+  - *Temperature Status (Upstream-Documented, Not Independently Reproduced):* In `docs/target_definition.md` (citing the upstream harmonization notebook), `Temperature (cel)` is documented as an active formula-contributing parameter under Ireland guidelines with a standard threshold of $25.0\ ^\circ\text{C}$. Because the raw dataset is available but the upstream notebook (`Data_Processing_Harmonization.ipynb`) is not distributed with it, this threshold and its exact mathematical contribution have not been independently reproduced. However, per repository documentation, it is an intended formula input, meaning it cannot be treated as a non-contributing feature for independent environmental prediction. It remains classified as an upstream-documented contributing input.
   - *Non-contributing features* are restricted strictly to metadata and spatiotemporal covariates (`Country`, `Area`, `Waterbody Type`, `Date`).
 - **Preprocessing Leakage:** Computing summary statistics (medians, scalers) over combined train and test sets (Kaufman et al., 2012). Preprocessing must be fitted strictly on $X_{train}$.
 - **Spatiotemporal Validation Leakage:** Random cross-validation on autocorrelated time-series or station records, causing models to interpolate known local readings rather than generalizing (Roberts et al., 2017).
@@ -228,18 +228,49 @@ The literature on machine learning for water quality assessment reveals three di
    - **Upstream Median Imputation Confound:** Exploratory data analysis revealed that median imputation was applied upstream across five of the eight chemical variables, predominantly in England records. Whether models exploit these constant fill values as geographical proxies requires empirical ablation.
    - **Formula Emulation vs. Physical Generalization:** Whether high predictive accuracy on `CCME_Values` reflects equation reconstruction rather than hydrological prediction requires controlled comparison against non-contributing features.
 
-### 6.2 Proposed Experimental Regimes
-To address these concerns transparently, our Phase 1 experimental architecture is structured into two proposed comparative evaluation regimes (with no empirical results claimed prior to model execution):
+### 6.2 Experimental Regimes
 
-- **Proposed Regime 1 (Formula Emulation Benchmark):**
-  - *Design:* Train Random Forest and XGBoost using the 8 chemical/physical variables documented as formula contributors (`Ammonia`, `BOD`, `DO`, `Orthophosphate`, `pH`, `Temperature`, `Nitrogen`, `Nitrate`).
-  - *Prerequisite:* Execution is conditional on confirming the upstream target-generation formula and verifying that the dataset reproduces the CCME calculations (including resolving the provisional single-row $F_2 \equiv F_1$ adaptation and the upstream zero reconstruction error claim).
-  - *Objective:* Benchmark the capacity of tree ensembles to approximate the non-linear piecewise CCME geometric distance equation.
-- **Proposed Regime 2 (Independent Environmental Prediction Benchmark):**
-  - *Design:* Exclude all 8 formula-contributing chemical inputs. Train models using strictly non-contributing metadata and spatiotemporal covariates (`Country`, `Area`, `Waterbody Type`, and seasonal date transformations).
-  - *Objective:* Evaluate how accurately water quality index categories can be inferred from environmental context alone, while transparently acknowledging the severe physical limitations of predicting chemical indices without contemporaneous chemical assays.
+Phase 1 was executed as a **partial-measurement availability ladder**. The design
+follows directly from the leakage taxonomy in Section 5.2: because `CCME_Values` is a
+deterministic closed-form function of the eight measurement inputs, a model given all
+eight recovers the formula rather than learning an environmental relationship. Varying
+how many inputs are withheld therefore measures how much of any reported accuracy was
+formula reconstruction, and creates a prediction task with genuine content — when a
+parameter is not assayed, the CCME equation cannot be evaluated at all, yet an index
+value is still required.
 
-Both regimes will utilize identical, persisted index partitions (`data/splits/`), shared preprocessing fitted strictly on training data (`src/preprocess.py`), and a standardized evaluation contract (`src/evaluate_api.py`).
+**Regime 1 — Formula Emulation Benchmark (8/8).** Random Forest and XGBoost trained on
+all eight formula-contributing variables. Reported as a benchmark and a pipeline check,
+*not* as a prediction result: a materially sub-perfect score here would indicate a defect
+upstream. Executed; XGBoost reached test $R^2 = 0.9997$.
+
+**Regimes 2–4 — Partial Measurement Availability (7/8, 6/8, 4/8).** Subsets chosen to be
+interpretable rather than exhaustive:
+
+| Regime | Withheld | Rationale |
+| :--- | :--- | :--- |
+| 7/8 | Orthophosphate | The dominant driver of the index — tightest guideline threshold (0.05 mg/l), Spearman $-0.917$ with the target |
+| 6/8 | \+ Biochemical Oxygen Demand | Removes the heavy-organics signal |
+| 4/8 | \+ Ammonia, Nitrogen | Retains the core physical-chemical suite (pH, dissolved oxygen, temperature, nitrate), approximating a continuously deployed in-situ sensor package without laboratory assay |
+
+Executed; XGBoost test $R^2$ falls to 0.834, 0.814 and 0.573 respectively, with MAE
+rising from 0.100 to 8.596 index points.
+
+**Metadata-only prediction was considered and not executed.** An earlier draft of this
+review proposed a regime excluding all eight contributors and training on `Country`,
+`Area`, `Waterbody Type` and date transformations alone. It was not run, and we do not
+report it. Two reasons: the design is physically weak — predicting a chemical index
+without any contemporaneous chemical assay — and the partial-availability ladder answers
+the same question more informatively, by showing *where* between full and zero
+information the predictive signal collapses. Its absence is stated as a limitation in the
+report, since such a regime would bound the residual formula reconstruction that remains
+at 7/8 and 6/8.
+
+All regimes use identical persisted partitions (`data/splits/`), site-grouped and
+stratified by country, with preprocessing fitted strictly on training data
+(`src/preprocess.py`) and a shared evaluation contract (`src/evaluate_api.py`). Masking a
+measurement also removes every feature derived from it, so no withheld input re-enters
+through a log transform or ratio.
 
 ---
 
