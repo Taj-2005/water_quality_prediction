@@ -1,0 +1,5 @@
+Model,Split,mae,rmse,r2,mape,medae
+Mean baseline,val,14.8069,18.56,-0.0006,22.5422,14.862
+Mean baseline,test,14.8996,18.6558,-0.0006,22.7192,14.862
+Median baseline,val,13.5192,19.3993,-0.0932,22.3903,9.6675
+Median baseline,test,13.6047,19.4916,-0.0923,22.57,9.6675
