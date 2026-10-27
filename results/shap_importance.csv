@@ -1,0 +1,24 @@
+Feature,Mean_Abs_SHAP
+Orthophosphate (mg/l),8.813104
+log_Orthophosphate,3.0618904
+Ammonia (mg/l),2.4546974
+Biochemical Oxygen Demand (mg/l),1.0609504
+log_Ammonia,0.6911946
+Nitrogen (mg/l),0.26656878
+pH (ph units),0.22936372
+log_BOD,0.17849162
+Temperature (cel),0.16011329
+N_P_ratio,0.110298656
+Inorganic_N_ratio,0.080784336
+log_Nitrogen,0.07327983
+BOD_DO_ratio,0.07285126
+Dissolved Oxygen (mg/l),0.062280074
+Nitrate (mg/l),0.02991811
+Organic_N_estimate,0.013466005
+Waterbody Type,0.010162467
+Organic_N_fraction,0.008717646
+log_Nitrate,0.006583281
+Country,0.005838761
+cos_day,0.0040509375
+sin_day,0.0023482007
+month,0.0011007191
