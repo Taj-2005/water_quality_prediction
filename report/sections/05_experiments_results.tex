@@ -3,8 +3,13 @@
 
 \subsection{Baseline and Full-Measurement Benchmark}
 Table~\ref{tab:main} reports the three models under full measurement availability. The
-median baseline attains $R^2 = -0.092$, confirming that a constant predictor is worse
-than useless on this target. Both ensembles exceed it by a wide margin, with XGBoost
+median baseline attains a test MAE of 13.605 and $R^2 = -0.092$. The negative $R^2$
+should not be read as evidence that the target is unusually hard: $R^2$ is defined
+against the mean predictor, which by construction sits at $R^2 \approx 0$, and a mean
+baseline on this data indeed gives $-0.0006$. The median scores worse on $R^2$ only
+because it minimises absolute rather than squared error, and correspondingly gives the
+lower MAE of the two (13.605 against 14.900). We use the median as the floor because MAE
+is our primary metric. Both ensembles exceed it by a wide margin, with XGBoost
 reaching $R^2 = 0.9997$ and a mean absolute error of 0.100 index points. Throughout, the
 two ensembles are trained on unequal budgets -- Random Forest on a 100{,}000-record
 subsample, XGBoost on the full 1{,}986{,}397-record partition

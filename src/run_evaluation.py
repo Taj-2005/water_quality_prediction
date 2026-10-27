@@ -496,10 +496,17 @@ def run_all_evaluations():
     p_china_train = xgb_model.predict(X_tr_xgb[china_train_mask])
     m_china = evaluate_regression(y_train[china_train_mask], p_china_train)
 
+    # China's single site (Hou Bay) cannot be divided across partitions without breaking
+    # the grouping guarantee, so it is allocated wholly to training and has ZERO test
+    # records. Its figures are in-sample and belong in a separate file: concatenating
+    # them into the test table mixed train rows with test rows and expressed
+    # pct_of_total over len(y_train), which made the test table's percentage column sum
+    # to 102.31 instead of 100.
     china_row = {
-        "Country": "China (In-Sample / Train Only - Hou Bay single area)",
-        "n_samples": china_n_train,
-        "pct_of_total": float(china_n_train / len(y_train) * 100.0),
+        "Country": "China (in-sample, train only - Hou Bay single area)",
+        "n_samples_train": china_n_train,
+        "pct_of_train": float(china_n_train / len(y_train) * 100.0),
+        "n_samples_test": 0,
         "mae": m_china["mae"],
         "rmse": m_china["rmse"],
         "r2": m_china["r2"],
@@ -508,10 +515,19 @@ def run_all_evaluations():
         "residual_mean": m_china["residual_mean"],
         "residual_std": m_china["residual_std"],
     }
-    df_country = pd.concat([df_country, pd.DataFrame([china_row])], ignore_index=True)
+    pd.DataFrame([china_row]).to_csv(RESULTS_DIR / "country_insample_china.csv", index=False)
+
     df_country.to_csv(RESULTS_DIR / "country_results.csv", index=False)
-    print("\nCountry Performance Analysis:")
+    assert abs(df_country["pct_of_total"].sum() - 100.0) < 0.01, (
+        "country_results.csv percentages must sum to 100 - it is a partition of the "
+        f"test set, got {df_country['pct_of_total'].sum():.2f}"
+    )
+    print("\nCountry Performance Analysis (test set only):")
     print(df_country.to_string(index=False))
+    print(
+        f"\nChina in-sample diagnostic written separately: {china_n_train:,} train "
+        "records, 0 test records."
+    )
 
     # Error analysis by Waterbody Type
     df_waterbody = evaluate_by_group(

@@ -183,19 +183,14 @@ def evaluate(y_true, y_pred) -> dict[str, float]:
     -------
     dict[str, float]
         Dictionary of metric names mapped to their float values (e.g.,
-        {'mae': ..., 'rmse': ..., 'r2': ...}), ready for logging to CSV in reports/.
+        {'mae': ..., 'rmse': ..., 'r2': ...}), ready for logging to CSV in results/.
 
-    Raises
-    ------
-    NotImplementedError
-        Raised until Satya completes the metric functions in ``src/metrics.py``.
+    See Also
+    --------
+    src.metrics.ceiling_split_metrics : the same metrics reported separately for
+        records at the index ceiling and below it. 35.92% of the target sits at
+        exactly 100, so a pooled figure answers two questions at once.
     """
-    try:
-        from src.metrics import regression_metrics
+    from src.metrics import regression_metrics
 
-        return regression_metrics(y_true, y_pred)
-    except (ImportError, NotImplementedError) as exc:
-        raise NotImplementedError(
-            "Evaluation metrics are not yet implemented. Satya will implement "
-            "regression_metrics(y_true, y_pred) [MAE, RMSE, R2] in src/metrics.py."
-        ) from exc
+    return regression_metrics(y_true, y_pred)

@@ -9,8 +9,9 @@ All figures below were measured on the full raw file (not a sample) with
 
 | Field | Value |
 | :--- | :--- |
-| Dataset name | Combined harmonized surface-water quality dataset with CCME WQI |
-| Provider / link | Figshare — DOI [10.6084/m9.figshare.27800394](https://doi.org/10.6084/m9.figshare.27800394) |
+| Dataset name | A Comprehensive Surface Water Quality Monitoring Dataset (1940–2023): 2.82 Million Record Resource for Empirical and ML-Based Research |
+| Authors | Karim, Syeed, Rahman, Rabbani, Fatema, Khan, Hossain & Uddin (Figshare, February 2025) |
+| Provider / link | Figshare — DOI [10.6084/m9.figshare.27800394.v2](https://doi.org/10.6084/m9.figshare.27800394) (verified 28 Oct 2026) |
 | License and terms of use | **CC BY 4.0** — reuse permitted with attribution. The IEEE report must cite the DOI above |
 | Upstream processing | Harmonization and CCME computation were performed by the dataset authors in `Data_Processing_Harmonization.ipynb`; benchmark models in `Technical_Validation.ipynb`. We did not run either — see [Upstream imputation](#upstream-imputation) for what that cost us |
 | File placed at | `data/raw/Combined_dataset.csv` (305 MiB, tracked with Git LFS) |

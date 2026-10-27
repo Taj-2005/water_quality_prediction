@@ -132,38 +132,56 @@ time period, so the model's behaviour is explainable in the viva and not just sc
 ```
 water_quality_prediction/
 ├── data/
-│   ├── raw/                     # original dataset, never edited (git-ignored)
+│   ├── raw/                     # Combined_dataset.csv, 305 MiB, Git LFS
 │   ├── processed/               # clean.parquet (committed); clean.csv generated locally
-│   └── splits/                  # saved train/val/test indices (git-ignored)
+│   └── splits/                  # persisted train/val/test indices (git-ignored)
 ├── notebooks/
 │   ├── 01_cleaning.ipynb        # cleaning decisions, each with its reason
-│   ├── 02_eda.ipynb             # distributions, missingness, correlation, outliers
-│   ├── 03_naive_baseline.ipynb  # mean / median / majority-class floor
+│   ├── 02_eda.ipynb             # distributions, imputation finding, nine conclusions
+│   ├── 03_naive_baseline.ipynb  # mean and median floors
 │   ├── 04_random_forest.ipynb   # RF training + hyperparameter search
-│   ├── 05_xgboost.ipynb         # XGBoost training + tuning + ablation
-│   ├── 06_evaluation.ipynb      # final results table, residuals, error by site/time
-│   └── 07_shap.ipynb            # SHAP + feature importance for the best model
+│   ├── 05_xgboost.ipynb         # XGBoost tuning + ablation
+│   └── 06_evaluation.ipynb      # final comparison, residuals, SHAP
 ├── src/
-│   ├── evaluate_api.py          # shared interface: load_data(), get_splits(), evaluate()
-│   ├── clean.py                 # raw -> data/processed/clean.csv
-│   ├── split.py                 # seeded site/time/random split, indices saved to disk
-│   ├── preprocess.py            # sklearn pipeline, fitted on train only
-│   ├── features.py              # derived features, leakage-checked
-│   ├── metrics.py               # MAE / RMSE / R2, or macro F1 + calibration
-│   ├── models_rf.py             # Random Forest training + tuning
-│   └── models_xgb.py            # XGBoost training + tuning
-├── reports/
-│   ├── figures/                 # figures used in the IEEE report and deck
-│   ├── rf_results.csv           # Random Forest metrics on shared val/test
-│   └── xgb_results.csv          # XGBoost metrics + ablation
+│   ├── config.py                # single seed and all paths
+│   ├── evaluate_api.py          # shared contract: load_data(), get_splits(), evaluate()
+│   ├── clean.py                 # raw -> clean.parquet, flags, no imputation
+│   ├── split.py                 # Area-grouped 70/15/15, stratified by country
+│   ├── preprocess.py            # train-only pipeline + partial-measurement masking
+│   ├── features.py              # log transforms, ratios, leakage-checked
+│   ├── metrics.py               # MAE / RMSE / R2 + ceiling-split reporting
+│   ├── models_rf.py             # Random Forest
+│   ├── models_xgb.py            # XGBoost
+│   ├── evaluation.py            # shared evaluation helpers
+│   └── run_evaluation.py        # one pass producing everything in results/
+├── results/                     # AUTHORITATIVE - cite these. See results/README.md
+│   ├── metrics.csv              # headline comparison of the three models
+│   ├── partial_measurement_results.csv   # the four availability regimes
+│   ├── ablation_results.csv     # engineered features, imputation flags
+│   ├── bootstrap_ci_results.csv # 95% confidence intervals
+│   ├── country_results.csv      # test error by country (China has 0 test records)
+│   ├── country_insample_china.csv
+│   └── shap_importance.csv      # feature attribution
+├── reports/                     # figures + per-module training logs. NOT for citation
+│   ├── figures/                 # every figure used by the report and deck
+│   └── *.csv                    # training-time logs, see reports/README.md
+├── report/                      # IEEE LaTeX source; make_tables.py generates tables
+│   └── water_quality_prediction_phase1_report.pdf
+├── presentation/
+│   └── phase1_presentation.pdf  # Phase 1 deck
 ├── docs/
-│   ├── target_definition.md     # the target, its standard/index definition, leakage risks
-│   ├── data_dictionary.md       # every column: unit, meaning, source, license
-│   ├── viva_prep.md             # likely questions for every part of the project
+│   ├── target_definition.md     # target, CCME formula, leakage analysis
+│   ├── data_dictionary.md       # every column + the upstream-imputation finding
+│   ├── literature_review.md     # related work and the experimental regimes
+│   ├── viva_prep.md             # 77 questions across nine areas
+│   ├── mock_viva_plan.md        # two-round rehearsal agenda
+│   ├── phase1_work_plan.md      # editable source of the work plan PDF
 │   ├── refs.bib                 # single source of truth for citations
 │   └── notes_<name>.md          # one page per member: "what I built and why"
+├── tests/                       # 129 tests; run without the dataset
+├── .github/workflows/ci.yml     # lint, format, tests, notebook hygiene
+├── pyproject.toml               # ruff + pytest configuration
 ├── requirements.txt
-├── .gitignore
 └── README.md
 ```
 
@@ -332,7 +350,7 @@ repository, reviews every pull request, and is the point of contact for the facu
 | **Parthraj** | Target, split, pipeline, final evaluation | `docs/target_definition.md`, `src/split.py`, `src/preprocess.py`, `src/evaluate_api.py`, `06_evaluation.ipynb`, `07_shap.ipynb` | `feat/parth-*` |
 | **Himanshu** | Literature review, feature engineering, Random Forest | `docs/refs.bib`, `src/features.py`, `src/models_rf.py`, `04_random_forest.ipynb` | `feat/himanshu-*` |
 | **Jivit** | XGBoost, ablation | `src/models_xgb.py`, `05_xgboost.ipynb`, `reports/xgb_results.csv` | `feat/jivit-*` |
-| **Satya** | IEEE report, presentation, metrics, naive baseline | Overleaf project, deck, `src/metrics.py`, `03_naive_baseline.ipynb`, `docs/viva_prep.md` | `feat/satya-*` |
+| **Satya** | IEEE report, presentation, metrics, naive baseline | `report/`, `presentation/`, `src/metrics.py`, `03_naive_baseline.ipynb`, `docs/viva_prep.md` | `feat/satya-*` |
 
 Per-member write-ups: [notes_taj.md](docs/notes_taj.md) · [notes_parth.md](docs/notes_parth.md) ·
 [notes_himanshu.md](docs/notes_himanshu.md) · [notes_jivit.md](docs/notes_jivit.md) ·

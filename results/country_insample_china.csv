@@ -1,0 +1,2 @@
+Country,n_samples_train,pct_of_train,n_samples_test,mae,rmse,r2,medae,max_error,residual_mean,residual_std
+"China (in-sample, train only - Hou Bay single area)",45977,2.3145927022644517,0,0.1828335897600663,0.6593873023668961,0.9796661137947043,0.026956096341805846,6.43578652161014,-0.0005254166398149727,0.6593870930341654
