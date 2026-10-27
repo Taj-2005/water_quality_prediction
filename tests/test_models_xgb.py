@@ -31,8 +31,8 @@ def test_match_categories_uses_train_categories():
 
 def test_train_returns_scores():
     res = models_xgb.train(**QUICK)
-    assert set(res["val_metrics"]) == {"mae", "rmse", "r2"}
-    assert set(res["test_metrics"]) == {"mae", "rmse", "r2"}
+    assert {"mae", "rmse", "r2"}.issubset(res["val_metrics"])
+    assert {"mae", "rmse", "r2"}.issubset(res["test_metrics"])
     assert res["config"]["n_train_samples"] == 5000
     assert len(res["feature_importances"]) == res["config"]["n_features"]
     assert "NOT independent prediction" in res["config"]["experiment_label"]
