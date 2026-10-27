@@ -1,0 +1,17 @@
+\begin{table*}[!t]
+    \centering
+    \caption{Ablation studies on XGBoost, all-measurements regime. $p$ is the feature count; all figures are test-set.}
+    \label{tab:ablation}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{lllrrr}
+        \toprule
+        Ablation & Config. & $p$ & MAE & RMSE & $R^2$ \\
+        \midrule
+        Imputation flags & Excluded (primary) & 10 & 0.1517 & 0.4005 & 0.99954 \\
+        Imputation flags & Included & 20 & 0.1474 & 0.3979 & 0.99954 \\
+        Features & Raw & 10 & 0.1517 & 0.4005 & 0.99954 \\
+        Features & Raw + engineered & 23 & 0.1000 & 0.3282 & 0.99969 \\
+        \bottomrule
+    \end{tabular}
+\end{table*}

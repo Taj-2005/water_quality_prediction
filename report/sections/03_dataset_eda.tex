@@ -1,0 +1,90 @@
+\section{Dataset and Exploratory Analysis}
+\label{sec:data}
+
+\subsection{Source and Scope}
+We use a harmonised surface-water monitoring dataset of 2{,}827{,}977 records across
+fourteen columns, covering England, the USA, Ireland, China and
+Canada~\cite{figshare2024waterquality}, released under CC BY 4.0. Records span
+2 January 1940 to 17 December 2023 over 61{,}689 monitoring sites. Each record carries
+eight measurements -- ammonia, biochemical oxygen demand (BOD), dissolved oxygen,
+orthophosphate, pH, temperature, nitrogen and nitrate -- together with the CCME index
+value and its five-class categorical binning.
+
+\subsection{Cleaning}
+Cleaning flags rather than deletes. Physically impossible readings are marked and
+retained: 505 records with pH outside $[0, 14]$, 15 negative concentrations, and 7{,}284
+temperatures above $40^\circ$C against an observed maximum of $98^\circ$C.
+Sub-zero temperatures are recorded separately and not treated as impossible, since saline
+water can be below $0^\circ$C. We removed 9{,}971 exact duplicate rows (0.35\%),
+leaving 2{,}818{,}006 records. No imputation is performed at this stage; it belongs to the
+preprocessing pipeline and is fitted on the training split only.
+
+\subsection{An Upstream Imputation Artefact}
+\label{sec:imputation}
+The delivered file reports no missing values. Examining modal values shows this is an
+artefact: five of the eight measurement columns carry their own \emph{exact median} as
+their single most frequent value -- dissolved oxygen at 31.60\% of rows, nitrate 25.33\%,
+BOD 24.28\%, pH 12.98\% and temperature 11.02\%. This is the signature of a median fill
+applied before publication. Only 39.11\% of records are free of fill values.
+
+Two consequences follow. First, the convention that imputation be fitted on training data
+alone was already violated before we received the data. Second, the fill is not uniformly
+distributed: England averages 2.04 filled measurements per record against at most 0.04 for
+every other country, while supplying 75.3\% of the data (Fig.~\ref{fig:imputation}). Mean
+index value is 91.31 for fully measured records and 75.89 for records with three filled
+measurements, so fill status is confounded with the target. We therefore expose these as
+diagnostic flags and exclude them from the primary feature set, testing their effect by
+ablation (Table~\ref{tab:ablation}).
+
+\begin{figure}[!t]
+    \centering
+    \includegraphics[width=\linewidth]{imputation_confound.png}
+    \caption{Upstream median imputation is concentrated in one country (left) and is
+    confounded with the target (right). Counts at six or more filled measurements are
+    small and the apparent recovery there is noise.}
+    \label{fig:imputation}
+\end{figure}
+
+\subsection{A Bounded Target with a Mass at the Ceiling}
+\label{sec:ceiling}
+The index is bounded above at 100 and 35.92\% of records sit exactly at that bound; the
+75th, 90th and 99th percentiles are all 100 (Fig.~\ref{fig:target}). The distribution has
+no upper tail, only a spike. The share at the ceiling varies from 20.9\% (England) to
+84.5\% (USA), so the target's shape differs by country. Residuals above the ceiling are
+impossible by construction, making errors asymmetric.
+
+We describe this as a bounded target with a point mass rather than a censored one, and
+the distinction matters for how it should be modelled. Censoring implies a latent value
+beyond the observation threshold that the recording process conceals. Here there is no
+latent value: by Equation~\eqref{eq:ccme}, a record for which every measurement meets its
+guideline yields $F_1 = F_2 = F_3 = 0$ and therefore exactly 100. The ceiling is a
+property of the index's construction, not of its measurement, so Tobit-style censored
+regression is not the appropriate remedy. What the mass does imply is that the task
+mixes two questions -- whether a record is fully compliant, and how far from compliance
+it falls otherwise -- which a single pooled error statistic reports as one number.
+
+\begin{figure}[!t]
+    \centering
+    \includegraphics[width=\linewidth]{target_distribution.png}
+    \caption{The CCME index is bounded at 100, where 35.92\% of records sit exactly
+    (left); the distribution below the ceiling is shown at right.}
+    \label{fig:target}
+\end{figure}
+
+\subsection{Distributional Properties}
+The measurements are strongly right-skewed: ammonia reaches a skewness of 11.98 with
+kurtosis 222, BOD 10.21 and orthophosphate 8.94. A $\log(1+x)$ transform reduces ammonia
+skewness to 3.35. Tree ensembles are invariant to monotone transforms, so this matters
+chiefly for the Phase 2 neural model, but we evaluate the transformed features in
+ablation regardless.
+
+Orthophosphate attains a Spearman correlation of $-0.917$ with the target, consistent
+with its tight guideline threshold dominating the index excursion term. Dissolved oxygen,
+by contrast, correlates almost not at all ($r = -0.031$). As dissolved oxygen is a
+``more-is-better'' parameter, this suggests the upstream implementation treats its
+guideline as an upper bound; we return to this in Section~\ref{sec:limitations}.
+
+Composition is uneven in two further respects. Effluent and sewage account for 22.1\% of
+records -- treatment-works outflow rather than natural surface water -- with a mean index
+of 66.6 against 90.0 for rivers. And 82\% of records fall between 2000 and 2019, with
+England's series beginning only in 2000.

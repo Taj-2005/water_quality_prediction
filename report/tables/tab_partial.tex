@@ -1,0 +1,21 @@
+\begin{table*}[!t]
+    \centering
+    \caption{Degradation under partial measurement availability. The 8/8 row is a formula-emulation benchmark, not independent prediction; genuine estimation begins at 7/8. $p$ is the feature count after masking; all figures are test-set.}
+    \label{tab:partial}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{llrrrr}
+        \toprule
+        Avail. & Model & $p$ & MAE & RMSE & $R^2$ \\
+        \midrule
+        8/8 & Random Forest & 38 & 0.408 & 0.920 & 0.9976 \\
+        8/8 & XGBoost & 23 & 0.100 & 0.328 & 0.9997 \\
+        7/8 & Random Forest & 35 & 5.328 & 8.145 & 0.8093 \\
+        7/8 & XGBoost & 20 & 4.776 & 7.597 & 0.8341 \\
+        6/8 & Random Forest & 32 & 5.675 & 8.544 & 0.7901 \\
+        6/8 & XGBoost & 17 & 5.209 & 8.045 & 0.8139 \\
+        4/8 & Random Forest & 25 & 9.305 & 12.781 & 0.5304 \\
+        4/8 & XGBoost & 10 & 8.596 & 12.190 & 0.5728 \\
+        \bottomrule
+    \end{tabular}
+\end{table*}

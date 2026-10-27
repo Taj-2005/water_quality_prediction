@@ -1,0 +1,16 @@
+\begin{table}[!t]
+    \centering
+    \caption{Phase 1 model comparison on the held-out test set, all-measurements regime; all figures are test-set. The baseline predicts the training median; Random Forest is fitted on a 100k subsample and XGBoost on the full training partition, both with engineered features.}
+    \label{tab:main}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{lrrrr}
+        \toprule
+        Model & MAE & RMSE & $R^2$ & Train (s) \\
+        \midrule
+        Naive baseline & 13.605 & 19.492 & -0.0923 & 0.0 \\
+        Random Forest & 0.408 & 0.920 & 0.9976 & 1.7 \\
+        XGBoost & 0.100 & 0.328 & 0.9997 & 49.3 \\
+        \bottomrule
+    \end{tabular}
+\end{table}

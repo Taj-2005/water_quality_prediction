@@ -1,0 +1,61 @@
+\section{Introduction}
+
+Routine environmental monitoring produces large volumes of physical and chemical
+measurements that must be reduced to an interpretable statement about water quality.
+Water quality indices serve this purpose by aggregating several parameters into a single
+dimensionless score, and the index published by the Canadian Council of Ministers of the
+Environment (CCME) is among the most widely adopted~\cite{ccme2001wqi}. Such indices are
+attractive targets for supervised learning: they are continuous, widely reported, and
+accompanied by exactly the tabular measurement data on which tree ensembles perform
+well~\cite{breiman2001randomforests, chen2016xgboost}.
+
+That attraction conceals a methodological trap. A water quality index is not an observed
+quantity but a deterministic function of its inputs. When a model is trained on the same
+measurements from which the index was computed, it is not learning a relationship between
+environmental conditions and water quality; it is approximating a closed-form expression
+that is already known. Reported accuracy under this framing is high and the model is
+uninformative. In the taxonomy of Kaufman et al.~\cite{kaufman2012leakage} this is target
+leakage, and we found it in a published, widely reusable dataset: the distributed CCME
+values are reproduced from their eight contributing measurements with zero reconstruction
+error.
+
+Our response is to change the question rather than abandon the data. When a monitoring
+programme fails to assay a parameter -- because an instrument failed, a sample was lost,
+or the assay was never scheduled -- the formula cannot be evaluated at all, yet an index
+value is still wanted. Estimating the index from the measurements that \emph{are}
+available is a task with genuine content, immediate operational relevance, and no
+closed-form solution. We therefore retain the all-measurements setting only as an
+emulation benchmark and a check on the pipeline, and define the prediction problem over
+subsets of the measurement vector.
+
+Working with a harmonised corpus of 2.8 million monitoring records from England, the USA,
+Ireland, China and Canada, we find the distinction is not academic. Withholding a single
+measurement moves gradient boosting from $R^2 = 0.9997$ to $0.834$ and multiplies mean
+absolute error by a factor of 48. The step between those two numbers is the quantitative
+statement of how much apparent accuracy was formula reconstruction rather than inference.
+
+Preparing the data surfaced a second issue of independent interest. The corpus reports no
+missing values, but five of its eight measurement columns carry their own exact median as
+their most frequent value, at frequencies between 11\% and 32\%. The gaps were filled
+before publication, the fill is concentrated almost entirely in one country, and it is
+confounded with the target. We treat this as a finding to be measured rather than a
+defect to be silently inherited.
+
+This paper contributes the following:
+\begin{itemize}
+    \item A documented target-leakage pathway in a public water quality dataset, with its
+          effect quantified by the gap between full and partial measurement availability.
+    \item A partial-measurement evaluation protocol over four regimes, under a
+          site-grouped split that admits no monitoring station to more than one partition.
+    \item A controlled comparison of Random Forest and XGBoost at every availability
+          level, with bootstrap confidence intervals and SHAP attribution.
+    \item Detection and quantification of an upstream imputation artefact, together with
+          an ablation showing that exposing it as a feature is not justified.
+\end{itemize}
+
+The remainder of the paper is organised as follows. Section~\ref{sec:related} reviews
+water quality indices, tree ensembles and leakage. Section~\ref{sec:data} describes the
+dataset, cleaning and exploratory findings. Section~\ref{sec:method} sets out the
+formulation, split and models. Section~\ref{sec:results} reports results,
+Section~\ref{sec:limitations} states limitations, and Section~\ref{sec:conclusion}
+concludes.

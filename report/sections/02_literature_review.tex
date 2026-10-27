@@ -1,0 +1,60 @@
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Water Quality Indices}
+Composite indices reduce a vector of measurements to one interpretable number. The
+approach originates with Horton~\cite{horton1965} and was formalised in the National
+Sanitation Foundation index of Brown et al.~\cite{brown1970wqi}; Abbasi and
+Abbasi~\cite{abbasi2012wqi} survey the family that followed. The CCME
+index~\cite{ccme2001wqi} combines three factors -- the proportion of variables failing
+their guideline (scope), the proportion of individual tests that fail (frequency), and
+the magnitude by which they fail (amplitude) -- as a normalised distance from an ideal
+state. Lumb et al.~\cite{lumb2011review} review its behaviour and note its sensitivity to
+the choice of guideline thresholds and to the temporal window over which frequency is
+computed, both of which matter for how the index is interpreted.
+
+\subsection{Machine Learning for Water Quality}
+Supervised learning has been applied to water resources along two distinct lines:
+predicting unmeasured or delayed constituents from sensor surrogates, and modelling
+composite indices directly for automated watershed scoring. Ahmed et
+al.~\cite{ahmed2019ml} and Bui et al.~\cite{bui2020hybrid} report strong accuracy for
+index prediction with tree ensembles and hybrid models. Our reading of this literature is
+that the second line requires care that is not always taken: when the index is a known
+function of the model's own inputs, high accuracy is the expected outcome and carries
+little information about the model.
+
+We retain the continuous formulation rather than predicting the five CCME classes.
+Discretisation discards variance precisely where it matters, since a transition from
+79.9 to 80.1 crosses a class boundary while a shift from 50 to 95 within a class is
+invisible, and it converts a naturally skewed continuous target into a severely imbalanced
+classification problem in which the worst-quality records are under 5\% of the corpus.
+
+\subsection{Tree Ensembles on Tabular Data}
+Random Forest~\cite{breiman2001randomforests} reduces variance by averaging decorrelated
+trees grown on bootstrap samples with random feature subsets, and rarely overfits as the
+ensemble grows. Its impurity-based importances are, however, biased under correlated or
+high-cardinality predictors, a caution raised by Strobl et al.~\cite{strobl2007} and
+echoed for hydrological applications by Tyralis et al.~\cite{tyralis2019}; we therefore
+report SHAP attributions~\cite{lundberg2017shap} rather than impurity importances.
+Gradient boosting~\cite{friedman2001gradient} instead fits trees sequentially to the loss
+gradient, reducing bias and capturing higher-order interactions, and
+XGBoost~\cite{chen2016xgboost} adds regularisation, shrinkage, column subsampling and
+sparsity-aware splitting.
+
+Comparative claims between these families are frequently confounded by unequal
+experimental conditions -- an extensively tuned boosting model set against a
+default-configured forest, or inconsistent partitions between the two. We hold the split,
+the preprocessing and the evaluation contract identical across models and availability
+regimes, so that the comparison reflects the algorithms rather than the effort spent on
+them.
+
+\subsection{Leakage and Optimistic Validation}
+Kaufman et al.~\cite{kaufman2012leakage} distinguish leakage in training examples from
+leakage in features, where a predictor encodes information about the target that would
+not be legitimately available. A target computed by formula from its own predictors is
+the extreme case: the mapping is exactly recoverable and generalisation error approaches
+the numerical precision of the approximation. Roberts et al.~\cite{roberts2017cv} make
+the related argument that structured data demands structured validation, since random
+partitioning of spatially or temporally clustered records places near-duplicates on both
+sides of the split. Both concerns apply directly here, and shape the formulation in
+Section~\ref{sec:method} and the split in Section~\ref{sec:split}.
