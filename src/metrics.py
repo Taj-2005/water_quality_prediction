@@ -29,10 +29,10 @@ from typing import Any
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _to_array(x: Any) -> np.ndarray:
     """Convert any array-like to a flat float64 NumPy array."""
@@ -54,6 +54,7 @@ def _validate_lengths(y_true: np.ndarray, y_pred: np.ndarray) -> None:
 # ---------------------------------------------------------------------------
 # Regression metrics
 # ---------------------------------------------------------------------------
+
 
 def regression_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
     """Compute regression metrics for a continuous target.
@@ -92,14 +93,16 @@ def regression_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
     ss_res = float(np.sum(residuals**2))
     ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
     if ss_tot == 0.0:
-        # All true values are identical — R² is undefined; return 0 with a warning.
-        warnings.warn(
-            "R² is undefined when y_true has zero variance (all values identical). "
-            "Returning 0.0.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-        r2 = 0.0
+        if ss_res == 0.0:
+            r2 = 1.0
+        else:
+            warnings.warn(
+                "R² is undefined when y_true has zero variance (all values identical). "
+                "Returning 0.0.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            r2 = 0.0
     else:
         r2 = float(1.0 - ss_res / ss_tot)
 
@@ -119,9 +122,7 @@ def regression_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
                 RuntimeWarning,
                 stacklevel=2,
             )
-        mape = float(
-            np.mean(np.abs(residuals[nonzero_mask] / y_true[nonzero_mask])) * 100.0
-        )
+        mape = float(np.mean(np.abs(residuals[nonzero_mask] / y_true[nonzero_mask])) * 100.0)
 
     # --- Median Absolute Error ---
     medae = float(np.median(np.abs(residuals)))
@@ -138,6 +139,7 @@ def regression_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 # Classification metrics
 # ---------------------------------------------------------------------------
+
 
 def classification_metrics(
     y_true: Any,
@@ -248,6 +250,7 @@ def classification_metrics(
 # Calibration helper (for classification diagnostics)
 # ---------------------------------------------------------------------------
 
+
 def calibration_data(
     y_true_continuous: Any,
     y_pred_continuous: Any,
@@ -276,7 +279,7 @@ def calibration_data(
     dict
         ``{'classification_metrics': {...}, 'category_labels': ['Poor', ...]}``
         where ``classification_metrics`` is the output of
-        :func:`classification_metrics`...
+        :func:`classification_metrics`.
     """
     DEFAULT_THRESHOLDS: dict[str, tuple[float, float]] = {
         "Poor": (0.0, 44.0),

@@ -21,12 +21,14 @@ from src.metrics import (
     regression_metrics,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _perfect_preds(n: int = 10, lo: float = 31.3, hi: float = 100.0) -> tuple[np.ndarray, np.ndarray]:
+
+def _perfect_preds(
+    n: int = 10, lo: float = 31.3, hi: float = 100.0
+) -> tuple[np.ndarray, np.ndarray]:
     """y_true == y_pred (perfect regression)."""
     rng = np.random.default_rng(0)
     y = rng.uniform(lo, hi, n)
@@ -36,6 +38,7 @@ def _perfect_preds(n: int = 10, lo: float = 31.3, hi: float = 100.0) -> tuple[np
 # ---------------------------------------------------------------------------
 # regression_metrics — correctness
 # ---------------------------------------------------------------------------
+
 
 class TestRegressionMetrics:
     def test_perfect_predictions_give_zero_error(self):
@@ -171,6 +174,7 @@ class TestRegressionMetrics:
 # classification_metrics — correctness
 # ---------------------------------------------------------------------------
 
+
 class TestClassificationMetrics:
     def test_perfect_classification(self):
         labels = ["Poor", "Fair", "Good"]
@@ -215,9 +219,15 @@ class TestClassificationMetrics:
         y = np.array(["Good", "Fair"])
         m = classification_metrics(y, y)
         expected_keys = {
-            "accuracy", "macro_f1", "weighted_f1",
-            "per_class_f1", "per_class_precision", "per_class_recall",
-            "support", "n_samples", "n_classes",
+            "accuracy",
+            "macro_f1",
+            "weighted_f1",
+            "per_class_f1",
+            "per_class_precision",
+            "per_class_recall",
+            "support",
+            "n_samples",
+            "n_classes",
         }
         assert set(m.keys()) == expected_keys
 
@@ -254,10 +264,10 @@ class TestClassificationMetrics:
 # calibration_data — smoke + regression-to-classification pipeline
 # ---------------------------------------------------------------------------
 
+
 class TestCalibrationData:
     def test_perfect_regression_gives_perfect_classification(self):
         """If regression predictions are exact, classification is also perfect."""
-        rng = np.random.default_rng(4)
         # Spread across all CCME categories
         y_true = np.array([20.0, 50.0, 70.0, 85.0, 97.0])
         y_pred = y_true.copy()
@@ -291,6 +301,7 @@ class TestCalibrationData:
 # ---------------------------------------------------------------------------
 # Integration: regression_metrics + calibration_data on synthetic dataset
 # ---------------------------------------------------------------------------
+
 
 class TestIntegration:
     def test_mean_baseline_r2_is_zero_and_mae_matches_std(self):
