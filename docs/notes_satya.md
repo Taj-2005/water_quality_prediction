@@ -17,7 +17,7 @@
 
 `src/metrics.py`, `notebooks/03_naive_baseline.ipynb`,
 `reports/naive_baseline_results.csv`, `docs/viva_prep.md`, the presentation deck
-(`water_quality_prediction_presentation_v2.pdf`), and the IEEE report content.
+(`presentation/phase1_presentation.pdf`), and the IEEE report content.
 
 ## What I built
 
