@@ -41,7 +41,9 @@ optuna_study/
 .vscode/
 .idea/
 
-# LaTeX build artefacts (report lives on Overleaf)
+# LaTeX build artefacts; the compiled PDF is committed at
+# report/water_quality_prediction_phase1_report.pdf
+report/build/
 *.aux
 *.log
 *.out

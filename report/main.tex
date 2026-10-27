@@ -1,0 +1,62 @@
+%% Water Quality Prediction - Phase 1 Report (IEEE conference format)
+%% Compile with pdfLaTeX. On Overleaf: Menu -> Compiler -> pdfLaTeX.
+%% Bibliography lives in ../docs/refs.bib and is shared with the rest of the repo.
+%% Tables under tables/ are GENERATED - run `python report/make_tables.py`, never edit by hand.
+
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{../reports/figures/}}
+
+\begin{document}
+
+\title{Estimating the CCME Water Quality Index under Partial Measurement
+Availability: A Controlled Comparison of Random Forest and Gradient Boosting}
+
+\author{
+\IEEEauthorblockN{Shaik Tajuddin}
+\IEEEauthorblockA{\textit{2401010436} \\ shaik.tajuddin2024@nst.rishihood.edu.in}
+\and
+\IEEEauthorblockN{Parthraj Singh Bhati}
+\IEEEauthorblockA{\textit{2401010320} \\ parthraj.bhati2024@nst.rishihood.edu.in}
+\and
+\IEEEauthorblockN{Himanshu Pandey}
+\IEEEauthorblockA{\textit{2401020095} \\ himanshu.h2024@nst.rishihood.edu.in}
+\and
+\IEEEauthorblockN{Jivit Rana}
+\IEEEauthorblockA{\textit{2401010202} \\ jivit.rana2024@nst.rishihood.edu.in}
+\and
+\IEEEauthorblockN{Satya Yadav}
+\IEEEauthorblockA{\textit{2401010427} \\ satya.yadav2024@nst.rishihood.edu.in}
+}
+
+\maketitle
+
+\begin{abstract}
+\input{sections/00_abstract}
+\end{abstract}
+
+\begin{IEEEkeywords}
+water quality index, CCME, gradient boosting, random forest, target leakage,
+missing measurements, tabular machine learning
+\end{IEEEkeywords}
+
+\input{sections/01_introduction}
+\input{sections/02_literature_review}
+\input{sections/03_dataset_eda}
+\input{sections/04_methodology}
+\input{sections/05_experiments_results}
+\input{sections/06_limitations}
+\input{sections/07_conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{../docs/refs}
+
+\end{document}

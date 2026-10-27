@@ -1,0 +1,16 @@
+Water quality indices condense several physical and chemical measurements into a single
+interpretable score through a fixed formula. This creates a problem when such an index
+becomes a supervised learning target: a model trained on the measurements that define it
+recovers the formula rather than learning anything about water quality. We demonstrate
+this on 2{,}818{,}006 harmonised surface-water records spanning five countries and eight
+decades, where gradient boosting reaches $R^2 = 0.9997$ against the CCME Water Quality
+Index -- a figure that reflects function approximation, not prediction. We therefore
+reframe the task as estimating the index when measurements are unavailable, the case in
+which the formula cannot be evaluated and an estimate is genuinely required. Across four
+availability regimes, performance falls to $R^2 = 0.834$ when one measurement is withheld
+and $0.573$ when four are, with mean absolute error rising from 0.100 to 8.596 index
+points. XGBoost leads Random Forest at every level on identical site-grouped test
+data, though on a larger training budget.
+We further identify an upstream median-imputation artefact affecting up to 31.6\% of
+individual columns, concentrated almost entirely in one country and confounded with the
+target, and show by ablation that it does not warrant inclusion as a feature.

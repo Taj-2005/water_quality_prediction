@@ -1,0 +1,88 @@
+\section{Experiments and Results}
+\label{sec:results}
+
+\subsection{Baseline and Full-Measurement Benchmark}
+Table~\ref{tab:main} reports the three models under full measurement availability. The
+median baseline attains $R^2 = -0.092$, confirming that a constant predictor is worse
+than useless on this target. Both ensembles exceed it by a wide margin, with XGBoost
+reaching $R^2 = 0.9997$ and a mean absolute error of 0.100 index points. Throughout, the
+two ensembles are trained on unequal budgets -- Random Forest on a 100{,}000-record
+subsample, XGBoost on the full 1{,}986{,}397-record partition
+(Section~\ref{sec:models}) -- so the margin between them is not a clean algorithmic
+comparison and should be read with that in mind.
+
+This near-perfect score should be read as what it is. By Equation~\eqref{eq:ccme} the
+target is determined by the inputs, so the result measures how well a tree ensemble
+approximates a known piecewise function. We report it as a benchmark and as a check on
+the pipeline: a materially lower score here would indicate a defect upstream.
+
+\input{tables/tab_main_results}
+
+\subsection{Partial Measurement Availability}
+Table~\ref{tab:partial} and Fig.~\ref{fig:degradation} give the central result.
+Withholding a single measurement moves XGBoost from $R^2 = 0.9997$ to $0.834$, and mean
+absolute error from 0.100 to 4.776 -- a factor of 48. Withholding four leaves
+$R^2 = 0.573$ and an error of 8.596 index points, which spans roughly one CCME quality
+class. XGBoost leads Random Forest at every level, and the margin is stable at
+2--4\% of $R^2$ despite the twentyfold difference in training-set size, which suggests
+the ordering is not purely a budget effect even though its magnitude is not separable
+from one.
+
+The gap between the 8/8 and 7/8 rows is the quantitative statement of the leakage
+problem. Almost all of the apparent accuracy in the full-measurement setting comes from
+the formula being reconstructible, not from any learned relationship that survives when
+an input is withdrawn.
+
+\input{tables/tab_partial}
+
+\begin{figure}[!t]
+    \centering
+    \includegraphics[width=\linewidth]{06_partial_measurement_degradation.png}
+    \caption{Test performance against measurement availability. The step between 8/8 and
+    7/8 isolates the contribution of formula reconstruction.}
+    \label{fig:degradation}
+\end{figure}
+
+\subsection{Ablations}
+Table~\ref{tab:ablation} isolates two design choices. Engineered features reduce XGBoost
+test MAE from 0.1517 to 0.1000, a 34\% relative improvement, confirming that the
+logarithmic transforms and chemical ratios carry information beyond the raw columns.
+Adding the upstream-imputation flags changes test MAE only from 0.1517 to 0.1474. Given
+their confounding with country (Section~\ref{sec:imputation}), this small gain does not
+justify their inclusion, and we exclude them from the primary configuration.
+
+\input{tables/tab_ablation}
+
+\subsection{Uncertainty and Error Decomposition}
+Table~\ref{tab:bootstrap} gives bootstrap confidence intervals. The intervals for Random
+Forest and XGBoost do not overlap on any metric, so the ordering between them is not an
+artefact of sampling.
+
+Table~\ref{tab:country} decomposes test error by country over all 415{,}804 test
+records. Performance is uniformly high in the full-measurement regime, but the sample
+sizes are extremely unequal: England supplies 76.8\% of test records and Canada 0.14\%,
+so the Canadian figures rest on 584 records and should not be read as a country-level
+comparison. England's share of the test set (76.8\%) differs slightly from its share of
+the corpus (75.3\%) because whole sites are allocated to partitions, so the split
+matches the target proportions only as closely as integer site sizes permit. China is
+absent: its single site is allocated wholly to training (Section~\ref{sec:split}), so it
+contributes no test records and cannot be evaluated out-of-sample.
+
+\input{tables/tab_bootstrap}
+\input{tables/tab_country}
+
+\subsection{Feature Attribution}
+Table~\ref{tab:shap} ranks features by mean absolute SHAP value. Orthophosphate dominates
+at 8.813, nearly three times the next contributor, which matches both its Spearman
+correlation of $-0.917$ and its position in Equation~\eqref{eq:ccme}: it carries the
+tightest guideline threshold and therefore the largest excursion term. The appearance of
+the engineered logarithmic transforms in the top five corroborates the ablation.
+
+\input{tables/tab_shap}
+
+\begin{figure}[!t]
+    \centering
+    \includegraphics[width=\linewidth]{06_shap_summary.png}
+    \caption{SHAP summary for the full-measurement XGBoost model.}
+    \label{fig:shap}
+\end{figure}

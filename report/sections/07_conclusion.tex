@@ -1,0 +1,43 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We set out to predict the CCME Water Quality Index from physical and chemical
+measurements and found that the conventional framing of that task does not survive
+examination. The index is a deterministic function of the measurements that define it, so
+a model given all eight recovers a formula rather than learning anything about water
+quality. Measured directly, this framing yields $R^2 = 0.9997$ and a mean absolute error
+of 0.100 index points -- figures that look like a result and are not one. We report them
+only as an emulation benchmark and as a check that the pipeline is sound.
+
+Reframing the problem as estimation under partial measurement availability restores its
+content. Withholding orthophosphate alone moves XGBoost to $R^2 = 0.834$ and multiplies
+error by a factor of 48; withholding half the measurements leaves $R^2 = 0.573$ and an
+error of 8.596 index points, roughly the width of one CCME quality class. The step
+between the full and partial regimes is the quantitative statement of how much apparent
+accuracy was reconstruction rather than inference. Within this formulation XGBoost leads Random
+Forest at every availability level, on identical test records and preprocessing, by a
+margin that bootstrap intervals confirm is not a sampling artefact -- though the two were
+trained on unequal budgets, so that margin bounds rather than measures the algorithmic
+difference. Engineered
+logarithmic and ratio features reduce error by 34\%, while flags marking upstream
+imputation, being confounded with country, do not earn inclusion.
+
+Two findings extend beyond this dataset. The first is that a published, reusable corpus
+reporting no missing values had in fact been median-imputed before release, in a pattern
+detectable only from the modal structure of its columns and concentrated almost entirely
+in one contributing country. The second is that dissolved oxygen, which should be among
+the most informative parameters in any water quality assessment, carries almost no
+relationship to the index as distributed -- consistent with its guideline being applied in
+the wrong direction upstream. Both were found by examining the data rather than the
+documentation, and both would have been invisible to a study that reported only
+predictive accuracy.
+
+Phase 2 extends this work to a regularised multilayer perceptron trained on the same
+partitions and preprocessing, which allows the tree ensembles and the neural model to be
+compared without the confounds that make such comparisons unreliable in the literature.
+The skewness documented in Section~\ref{sec:data} is expected to matter there in a way it
+does not for trees, since neural models are not invariant to monotone transforms, and the
+engineered features will be ablated accordingly. The point mass at the target's ceiling also
+deserves direct treatment, through metrics separated by compliance status and potentially
+through a model that represents the boundary explicitly rather than regressing through
+it.

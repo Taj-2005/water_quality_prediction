@@ -1,0 +1,72 @@
+\section{Limitations}
+\label{sec:limitations}
+
+\paragraph{Target leakage is mitigated, not eliminated}
+The 8/8 regime reconstructs the index formula and we report it as a benchmark rather
+than a prediction result. Even at 7/8 and 6/8, the retained measurements are formula
+contributors, so part of the remaining performance is partial formula reconstruction
+rather than environmental inference. A fully independent regime -- predicting the index
+from metadata and spatiotemporal context alone, with no formula contributors -- would
+bound this, and we did not run it.
+
+\paragraph{A point mass at the ceiling is reported as one number}
+With 35.92\% of records at the upper bound, pooled $R^2$ and RMSE conflate two tasks:
+identifying records that are fully guideline-compliant, and estimating how far the
+remainder fall short. The figures reported here are pooled. Metrics separated by ceiling
+status would characterise the models more honestly, particularly in the low-availability
+regimes where identifying compliance is likely the easier half of the problem. We note
+that this is a bounded target rather than a censored one
+(Section~\ref{sec:ceiling}): no latent value exists above 100, so the remedy is
+stratified reporting, not a censored-regression estimator.
+
+\paragraph{Imputation cannot be undone}
+Up to 31.6\% of individual measurement columns were median-filled before publication
+(Section~\ref{sec:imputation}). The original missingness pattern is unrecoverable, so the
+mechanism cannot be classified as MCAR, MAR or MNAR. Because the fill is concentrated in
+England, fill status, country and target are mutually confounded, and no split design
+removes this.
+
+\paragraph{A probable defect in the upstream index}
+Dissolved oxygen correlates with the target at $r = -0.031$. Dissolved oxygen is a
+``more-is-better'' parameter and would normally be among the most informative inputs. The
+upstream implementation appears to treat its guideline as an upper bound to remain below,
+inverting its contribution. We report the index as published and flag this rather than
+silently correcting it.
+
+\paragraph{Composition and coverage}
+Effluent and sewage comprise 22.1\% of records, so the dataset is not purely natural
+surface water. England supplies 75.3\% of records and its series begins in 2000, so the
+corpus is not geographically or temporally balanced, and aggregate metrics are dominated
+by one country.
+
+\paragraph{What the split does and does not establish}
+Because whole monitoring stations are allocated to a single partition, every test record
+comes from a site the model has never seen, and the reported figures are therefore
+estimates of generalisation to new stations. They are not estimates of generalisation
+across time: the split is not chronological, so a test site's records may fall in the
+same period as the training data, and nothing here speaks to extrapolation into future
+years or to conditions outside the observed range. The Chinese subset is a further
+exception, being single-site and allocated entirely to training
+(Section~\ref{sec:split}); its per-country figures are in-sample.
+
+\paragraph{Unequal training budgets}
+Random Forest is fitted on a 100{,}000-record subsample while XGBoost uses the full
+1{,}986{,}397-record training partition (Section~\ref{sec:models}). Validation and test
+records, preprocessing and feature sets are identical, but the training data is not. The
+margin reported in favour of XGBoost therefore confounds algorithmic capability with
+training-set size, and should be read as an upper bound on the true algorithmic gap.
+Equalising the budgets is the first experiment we would add.
+
+\paragraph{China cannot be evaluated out-of-sample}
+China contributes a single monitoring site, which cannot be divided across partitions
+without breaking the grouping guarantee and is therefore allocated wholly to training. It
+contributes no test records and is absent from Table~\ref{tab:country}. Nothing in this
+paper evidences performance on Chinese waters.
+
+\paragraph{Subset selection}
+The four availability regimes are interpretable rather than exhaustive. There are eight
+ways to withhold one measurement and seventy ways to withhold four; we report one
+informative choice at each level rather than averaging over all of them. The degradation
+curve should therefore be read as evidence that performance collapses once formula
+reconstruction is impossible, not as a precise estimate of expected loss under arbitrary
+missingness.

@@ -1,0 +1,120 @@
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Problem Formulation}
+Let $x \in \mathbb{R}^8$ denote the measurement vector -- ammonia, BOD, dissolved oxygen,
+orthophosphate, pH, temperature, nitrogen and nitrate -- and $y \in [0,100]$ the CCME
+index. The index is defined~\cite{ccme2001wqi} from a scope factor $F_1$, a frequency
+factor $F_2$ and an amplitude factor $F_3$ as
+\begin{equation}
+    y = 100 - \frac{\sqrt{F_1^2 + F_2^2 + F_3^2}}{1.732},
+    \label{eq:ccme}
+\end{equation}
+where $\sqrt{3} \approx 1.732$ normalises the maximum attainable distance to 100. Because
+each record in this corpus is an individual measurement rather than an aggregated time
+window, the upstream pipeline sets $F_2 \equiv F_1$; we note this adaptation because it
+departs from the protocol as published and affects how the index should be read.
+
+Equation~\eqref{eq:ccme} is deterministic in $x$. Learning $f : x \mapsto y$ from the
+complete vector is therefore function approximation, and its error is bounded below only
+by the capacity of the approximator. We instead study
+\begin{equation}
+    f_S : x_S \mapsto y, \qquad S \subset \{1,\dots,8\},
+    \label{eq:partial}
+\end{equation}
+where $x_S$ is the measurement vector restricted to an available subset. For
+$|S| < 8$ the formula cannot be evaluated, no closed-form solution exists, and the model
+must exploit statistical structure among parameters, sites and water body types. We
+report $|S| \in \{8,7,6,4\}$ and retain $|S| = 8$ as an emulation benchmark rather than a
+prediction result.
+
+The subsets are chosen to be interpretable rather than exhaustive. The 7/8 regime
+withholds orthophosphate, which Section~\ref{sec:results} shows to be the dominant driver
+of the index; 6/8 additionally withholds BOD, removing the heavy-organics signal; and 4/8
+retains only the core physical-chemical suite of pH, dissolved oxygen, temperature and
+nitrate, approximating what a continuously deployed in-situ sensor package measures
+without laboratory assay.
+
+\subsection{Splitting}
+\label{sec:split}
+All experiments share one partition, generated once and persisted to disk. Every model at
+every availability level is validated and tested on byte-identical records, so reported
+differences between models are not attributable to differences in evaluation data. The
+training sets differ in size, and we state that explicitly in Section~\ref{sec:models}
+rather than claiming a parity we do not have.
+
+Records are grouped by monitoring station (\texttt{Area}, 61{,}689 distinct sites) and
+whole groups are allocated to training, validation or test in a $70/15/15$ ratio, with
+allocation stratified by country. No site appears in more than one partition. This
+follows directly from the concern raised in~\cite{roberts2017cv}: the same station
+sampled on consecutive dates yields near-identical chemistry, so a record-level random
+split would place near-duplicates on both sides and report a figure that reflects site
+memorisation rather than generalisation. Within each country, sites are shuffled under a
+fixed seed and assigned by greedy bin-packing in descending size order, each site going
+to whichever partition has the largest remaining deficit, which matches the target
+proportions as closely as integer site sizes permit.
+
+One country resists this treatment. China contributes a single site (Hou Bay), which
+cannot be divided without breaking the zero-leakage guarantee, and is therefore allocated
+entirely to training. Chinese records consequently appear in the reported per-country
+breakdown as in-sample and are labelled as such; they are not evidence of generalisation.
+
+\subsection{Preprocessing and Features}
+The target is isolated before any transformation and never enters the design matrix. All
+fitted statistics -- imputer medians, category encodings and scalers -- are learned from
+the training partition alone and applied unchanged to validation and test. Masking for a
+partial-measurement regime removes the withheld columns and, importantly, any derived
+feature computed from them, so that no masked measurement re-enters through a ratio or a
+transform.
+
+The raw feature set comprises the available measurements together with country and water
+body type. Site identifiers are excluded: with 61{,}689 levels under a site-grouped
+split, every test site is unseen by construction, so the variable can only act as noise.
+The engineered set adds logarithmic transforms of the skewed measurements -- ammonia,
+BOD, nitrate, nitrogen and orthophosphate, whose skewness reaches 11.98 -- and ratios
+between chemical parameters. Flags marking upstream-imputed values
+(Section~\ref{sec:imputation}) are withheld from the primary feature set and evaluated
+separately by ablation, because they are confounded with country.
+
+Programmatic checks assert, for every configuration, that the target does not appear
+among the features and that no group spans two partitions.
+
+\subsection{Models and Training Budgets}
+\label{sec:models}
+Three predictors are compared. A median predictor establishes the floor any model must
+clear. Random Forest is tuned over tree count, depth, minimum leaf size and features per
+split. XGBoost is tuned over learning rate, depth, subsample, column subsample, minimum
+child weight and $L_1$/$L_2$ regularisation, with early stopping on the validation
+partition.
+
+The two ensembles are not trained on the same number of records. The partition assigns
+1{,}986{,}397 records to training, and XGBoost uses all of them; Random Forest is fitted
+on a uniformly drawn subsample of 100{,}000, approximately 5\% of the available training
+data. The reason is computational: Random Forest grows unpruned trees whose memory and
+fitting cost scale with the number of records retained at every node, and fitting the
+full partition was not feasible within our budget, whereas boosting's sequential,
+depth-limited trees are far cheaper per record.
+
+This is a genuine asymmetry and we do not want it read as a like-for-like comparison. The
+two models see identical validation and test records, identical preprocessing and the
+same feature sets, but unequal training data. The reported margin in favour of XGBoost
+therefore reflects a combination of algorithmic difference and training budget, and part
+of the gap would likely close if Random Forest were given the full partition. We return
+to this in Section~\ref{sec:limitations}. Both expose the same training interface so that the Phase 2 neural model can
+enter the identical evaluation path. Hyperparameters are selected on validation only; the
+test partition is evaluated once, at the end.
+
+\subsection{Metrics}
+We report mean absolute error, root mean squared error and the coefficient of
+determination, computed through a single shared implementation so that every model is
+scored identically. MAE is reported alongside RMSE because the two respond differently to
+the heavy tails documented in Section~\ref{sec:data}: RMSE is dominated by the small
+number of large excursions, while MAE describes the typical record. $R^2$ is reported for
+comparability with the water quality literature, with the caveat that its baseline is the
+target variance, which differs across availability regimes.
+
+Confidence intervals are obtained by bootstrap resampling of the test partition, which
+makes the comparison between models a statement about sampling variability rather than a
+single point estimate. As noted in Section~\ref{sec:ceiling}, the target is bounded above
+and carries a large point mass at that bound; the metrics reported here are pooled across
+it, and Section~\ref{sec:limitations} states what that conflates.

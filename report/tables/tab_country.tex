@@ -1,0 +1,17 @@
+\begin{table}[!t]
+    \centering
+    \caption{Test error decomposed by country, over all 415{,}804 test records. China is absent by construction: its single site (Hou Bay) is allocated wholly to training, so it contributes no test records and cannot be evaluated out-of-sample.}
+    \label{tab:country}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{lrrrrr}
+        \toprule
+        Country & $n$ & \% of test & MAE & RMSE & $R^2$ \\
+        \midrule
+        England & 319184 & 76.76 & 0.116 & 0.329 & 0.9997 \\
+        USA & 60787 & 14.62 & 0.062 & 0.394 & 0.9937 \\
+        Ireland & 35249 & 8.48 & 0.019 & 0.123 & 0.9996 \\
+        Canada & 584 & 0.14 & 0.176 & 0.561 & 0.9982 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
