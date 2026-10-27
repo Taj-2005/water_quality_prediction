@@ -276,7 +276,7 @@ def calibration_data(
     dict
         ``{'classification_metrics': {...}, 'category_labels': ['Poor', ...]}``
         where ``classification_metrics`` is the output of
-        :func:`classification_metrics`.
+        :func:`classification_metrics`...
     """
     DEFAULT_THRESHOLDS: dict[str, tuple[float, float]] = {
         "Poor": (0.0, 44.0),
