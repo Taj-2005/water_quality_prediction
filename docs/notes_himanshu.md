@@ -3,7 +3,7 @@
 | | |
 | :--- | :--- |
 | **GitHub** | [@14-himanshu](https://github.com/14-himanshu) |
-| **Role** | Literature review, feature engineering, Random Forest |
+| **Role** | Feature engineering, Random Forest, model evaluation |
 | **Branch prefix** | `himanshu` |
 | **Theory note for the report** | Random Forest: bagging, variance reduction, out-of-bag error |
 
@@ -12,18 +12,15 @@ see individual contribution, so write it as you go rather than at the end.
 
 ## Files I own
 
-`docs/refs.bib`, `src/features.py`, `tests/test_features.py`, `src/models_rf.py`, `tests/test_models_rf.py`, `notebooks/04_random_forest.ipynb`
+`src/features.py`, `tests/test_features.py`, `src/models_rf.py`, `tests/test_models_rf.py`, `notebooks/04_random_forest.ipynb`
 
 ## What I built
 
-1. **Rigorous Literature Review & Verified BibTeX Repository (`docs/literature_review.md`, `docs/refs.bib`)**:
-   - Curated and verified 17 foundational and empirical references across WQI theory (CCME 2001, Horton 1965, Brown et al. 1970, Abbasi & Abbasi 2012, Lumb et al. 2011), machine learning in water science (Ahmed et al. 2019, Bui et al. 2020, Tyralis et al. 2019), ensemble theory (Breiman 2001, Friedman 2001, Chen & Guestrin 2016), feature importance bias (Strobl et al. 2007), game-theoretic explainability (Lundberg & Lee 2017), deep learning foundations (Goodfellow et al. 2016), data leakage prevention (Kaufman et al. 2012, Roberts et al. 2017), and the Figshare dataset record (DOI: 10.6084/m9.figshare.27800394).
-   - **Retraction handling:** Removed the retracted Aldhyani et al. (2020) paper (`10.1155/2020/6659314`) and all associated claims.
-   - **Bui et al. (2020) correction:** Corrected author 5 to `Nerantzis Kazakis`. Accurately documented that the best performance in the Talar catchment, Iran, belonged to the hybrid Bagging-Random Tree (BA-RT) model ($R^2 = 0.941$, $\text{RMSE} = 2.71$), rather than standalone Random Forest alone.
-   - **Ahmed et al. (2019) correction:** Removed unsupported claims that Random Forest or SVM were benchmarked, accurately reporting their actual evaluation of MLP, RBF, and hybrid Wavelet-ANFIS (WDT-ANFIS) on the Johor River Basin, Malaysia.
-   - **CCME WQI Protocol qualification:** Formally distinguished the official aggregative multi-period CCME standard ($\ge 4$ variables sampled $\ge 4$ times) from the dataset's point-in-time single-row adaptation ($F_2 \equiv F_1$). Kept the zero reconstruction error claim explicitly provisional pending local execution of the raw 305 MB dataset and upstream harmonization scripts.
-   - **Schema & Feature qualification:** Verified available columns from `docs/data_dictionary.md`, removed unfeasible $BOD:COD$ proposals (no COD in schema), added $\epsilon$-smoothing to candidate stoichiometric ratios, explained the statistical caveats of clipping negative readings, and clarified that Temperature is an upstream-documented formula input (25.0 °C threshold per `docs/target_definition.md`) rather than an independently reproduced parameter.
-   - **Research gap tightening:** Categorized gaps into literature-demonstrated limitations (eclipsing, MDI bias), general methodological risks (leakage, autocorrelation), and project-specific hypotheses (35.92% target ceiling, England upstream median imputation, formula emulation vs. generalization). Structured the two evaluation regimes as proposed comparative designs without claiming pre-experimental results.
+1. **Target Formulation & Domain Analysis**:
+   - Analyzed the target definition (`CCME_Values`), Ireland guideline thresholds, and mathematical mechanics of the CCME index equation.
+   - Formulated the critical experimental distinction between **Regime 1 (Formula Emulation / Benchmark Surrogate)** and **Regime 2 (Independent Environmental Prediction)** to ensure academic honesty and avoid conflating algebraic approximation with ecological prediction.
+   - Audited candidate features against the verified dataset schema in `docs/data_dictionary.md` (e.g., removing unfeasible $BOD:COD$ proposals due to absence of COD in the schema, establishing numerical safeguards for near-zero and negative readings).
+   - Identified the target boundary condition: 35.92% of samples sit at the maximum ceiling of 100.0, establishing a hypothesis on tree regression behavior at censored boundaries.
 
 2. **Phase 1 Upstream Audit & Synchronization**:
    - Reconciled repository metadata following the merge of Taj's PR #4 and PR #5 into `main`, confirming `data/processed/clean.parquet` (45.3 MB), `pyarrow>=14.0`, and Figshare DOI `10.6084/m9.figshare.27800394`.
@@ -75,7 +72,7 @@ see individual contribution, so write it as you go rather than at the end.
 
 - **Supplied to Jivit**: Established the baseline Random Forest implementation and validation results in `reports/rf_results.csv`, against which XGBoost will be benchmarked in `notebooks/05_xgboost.ipynb`.
 - **Supplied to Parth**: Logged standard metrics (`mae`, `rmse`, `r2`) and generated figures in `reports/figures/` for consolidation into the final multi-model comparison table in `notebooks/06_evaluation.ipynb`.
-- **Supplied to Satya**: Verified metric schema compatibility (`compute_metrics` matches `regression_metrics` specifications) and provided empirical data for the literature review and discussion sections of the IEEE report.
+- **Supplied to Satya**: Verified metric schema compatibility (`compute_metrics` matches `regression_metrics` specifications) and provided empirical results, figures, and discussion sections for the IEEE report.
 
 ## Experimental Results Summary
 
