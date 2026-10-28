@@ -48,15 +48,38 @@ MEASUREMENTS = [
 CATEGORICALS = ["Country", "Waterbody Type", "CCME_WQI"]
 DATE_FORMAT = "%d-%m-%Y"
 
-# Physically impossible or implausible readings. Rows are flagged, never dropped:
-# deleting them would hide a data-quality problem the report has to discuss.
+# --- anomaly screening thresholds -------------------------------------------------
+# These SCREEN for values that warrant review. They are not assertions that a reading is
+# physically impossible, and rows are flagged rather than dropped so the decision stays
+# with the modelling pipeline. See docs/data_dictionary.md for counts and sources.
+
+# The conventional pH scale for natural water is 0-14 (USGS Water Science School, "pH and
+# Water"). It is an operational convention, not a physical bound: pH is defined as
+# -log10(a_H+), and environmental waters as acidic as pH -3.6 have been measured
+# (Nordstrom et al. 2000, doi:10.1021/es990646v). Values outside 0-14 are therefore
+# treated as implausible for routine surface-water monitoring, not as impossible.
 PH_MIN, PH_MAX = 0.0, 14.0
-TEMP_IMPLAUSIBLE_C = 40.0  # observed max is 98 C, impossible for surface water
+
+# PROJECT-SPECIFIC SCREENING HEURISTIC, not a standard or a physical limit. Natural
+# surface water does exceed 40 C: USGS documents thermal springs discharging at 50 C and
+# boiling at 93 C (Farrar, USGS Fact Sheet 2007-3045). The value is chosen because this
+# corpus is routine ambient monitoring rather than geothermal survey, and because the
+# flagged readings concentrate in one country in a pattern consistent with a unit-coding
+# error (see docs/data_dictionary.md). The count is insensitive to the exact cutoff:
+# 35/40/45 C flag 7,576 / 7,284 / 6,818 rows. Reproduce with src/sensitivity_temperature.py.
+TEMP_IMPLAUSIBLE_C = 40.0
+
+# Columns screened for negative values. NOTE: this list includes pH, which is a
+# logarithmic activity rather than a concentration, so a negative pH is captured by both
+# this flag and flag_ph_out_of_range. The overlap is one row and is documented rather
+# than changed, because the flag semantics are consumed downstream.
 NON_NEGATIVE = [c for c in MEASUREMENTS if c != "Temperature (cel)"]
 
-# A measurement column whose single most common value accounts for more than this share
-# of rows is not a natural distribution - it is a fill value. See the upstream-imputation
-# section of docs/data_dictionary.md for the evidence.
+# Share of rows at a single modal value above which a measurement column is treated as
+# showing SUSPECTED upstream imputation. The repeated-value pattern is observed directly;
+# that median imputation produced it is an inference from that pattern, not an established
+# fact about the upstream pipeline. See docs/data_dictionary.md for the evidence and its
+# limits.
 IMPUTATION_SHARE_THRESHOLD = 0.05
 
 
@@ -83,7 +106,17 @@ def load_raw() -> pd.DataFrame:
 
 
 def flag_impossible_values(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
-    """Add boolean flags for physically impossible readings. Drops nothing."""
+    """Flag values that fall outside the screening thresholds. Drops nothing.
+
+    The flags mark observations as POTENTIALLY ANOMALOUS and retained for review. They do
+    not establish that a reading is erroneous: each threshold is either a conventional
+    operating range (pH) or a project-specific screening choice (temperature), and an
+    out-of-range value may equally indicate a unit-coding error, an instrument fault, a
+    transcription error, or a genuine extreme.
+
+    Column names and semantics are fixed: downstream preprocessing, the ablation study and
+    the report all consume them, so they are documented rather than renamed.
+    """
     counts: dict[str, int] = {}
 
     ph = df["pH (ph units)"]
@@ -99,8 +132,11 @@ def flag_impossible_values(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, in
     df["flag_temp_implausible"] = df["Temperature (cel)"] > TEMP_IMPLAUSIBLE_C
     counts[f"temperature above {TEMP_IMPLAUSIBLE_C:.0f} C"] = int(df["flag_temp_implausible"].sum())
 
-    # Sub-zero water temperature is plausible for saline water, so it is flagged for
-    # review rather than treated as impossible.
+    # Sub-zero water temperature is physically possible: seawater at 35 ppt freezes near
+    # -2 C (NOAA, "Sea Water"). That is a statement about saline water in general, NOT a
+    # claim about these particular records - 30 of the 32 are English rivers, whose
+    # salinity is unknown to us. The flag therefore marks them for review and is kept out
+    # of flag_any_impossible.
     df["flag_temp_below_zero"] = df["Temperature (cel)"] < 0
     counts["temperature below 0 C (review only)"] = int(df["flag_temp_below_zero"].sum())
 

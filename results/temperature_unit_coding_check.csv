@@ -1,0 +1,5 @@
+country,rows_above_cutoff,pct_of_country_rows,median_as_reported_c,median_if_read_as_f,pct_in_ambient_band_if_f
+USA,6970,1.6843,63.0,17.22,99.99
+Ireland,180,0.0766,46.4,8.0,97.22
+England,132,0.0062,48.45,9.14,96.21
+Canada,2,0.0506,65.33,18.52,100.0

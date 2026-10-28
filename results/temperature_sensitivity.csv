@@ -1,0 +1,6 @@
+cutoff_c,rows_flagged,pct_of_dataset,is_project_default,delta_vs_default
+30.0,8918,0.3153,False,1634
+35.0,7576,0.2679,False,292
+40.0,7284,0.2576,True,0
+45.0,6818,0.2411,False,-466
+50.0,5979,0.2114,False,-1305
