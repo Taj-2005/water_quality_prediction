@@ -11,13 +11,79 @@ orthophosphate, pH, temperature, nitrogen and nitrate -- together with the CCME 
 value and its five-class categorical binning.
 
 \subsection{Cleaning}
-Cleaning flags rather than deletes. Physically impossible readings are marked and
-retained: 505 records with pH outside $[0, 14]$, 15 negative concentrations, and 7{,}284
-temperatures above $40^\circ$C against an observed maximum of $98^\circ$C.
-Sub-zero temperatures are recorded separately and not treated as impossible, since saline
-water can be below $0^\circ$C. We removed 9{,}971 exact duplicate rows (0.35\%),
-leaving 2{,}818{,}006 records. No imputation is performed at this stage; it belongs to the
-preprocessing pipeline and is fitted on the training split only.
+\label{sec:cleaning}
+Cleaning screens rather than deletes. Observations falling outside the thresholds below
+are marked with boolean flags and retained, so that the decision to exclude them remains
+with the modelling pipeline and is visible in the results rather than buried in a data
+preparation step. We emphasise that these flags identify observations as \emph{potentially
+anomalous and warranting review}; with the exception of the duplicate rule they do not
+establish that a reading is erroneous.
+
+\paragraph{pH outside the conventional scale}
+505 records (0.018\%) fall outside $[0,14]$, of which 504 lie above 14 (maximum 30.0) and
+one below 0. The $0$--$14$ interval is the conventional scale for natural
+water~\cite{usgs_ph_water}, but it is an operational convention rather than a physical
+bound: pH is defined as $-\log_{10} a_{\mathrm{H}^+}$, and environmental waters as acidic
+as $\mathrm{pH} = -3.6$ have been measured in acid mine
+drainage~\cite{nordstrom2000negativeph}. These records are therefore flagged as
+implausible for routine ambient monitoring, not as impossible.
+
+\paragraph{Temperature above $40^\circ$C}
+7{,}284 records (0.258\%) exceed $40^\circ$C, against an observed maximum of $98^\circ$C.
+\textbf{This cutoff is a project-specific screening heuristic and not a published
+standard.} Natural surface water does exceed it: the U.S. Geological Survey documents
+thermal springs discharging at $50^\circ$C and boiling at $93^\circ$C in a California
+creek~\cite{farrar2007hotcreek}. The threshold is justified only by the character of this
+corpus, which is routine ambient monitoring rather than geothermal survey.
+
+Two observations support treating these records as a recording artefact rather than as
+extreme measurements. First, 95.7\% of them come from the USA, which constitutes 14.6\% of
+the corpus; the flagged proportion is 1.68\% of US records against 0.006\% of English
+ones. Second, reading the flagged values as Fahrenheit places 99.99\% of the US subset
+within an ambient $0$--$35^\circ$C band, shifting the median from $63.0^\circ$C to
+$17.2^\circ$C, which is consistent with the median of $11.1^\circ$C for unflagged US
+records. A unit-coding error confined largely to one national monitoring programme is
+therefore the most parsimonious explanation, though we note it remains a hypothesis that
+the distributed data alone cannot confirm. We retain the readings as supplied and
+correct nothing.
+
+The flag is also insensitive to the exact cutoff. Candidate thresholds of $35$, $40$ and
+$45^\circ$C flag 7{,}576, 7{,}284 and 6{,}818 records respectively -- a span of 758 records,
+or 0.027\% of the corpus. No conclusion in this paper depends on the choice within that
+range.
+
+\paragraph{Negative measurement values}
+15 records carry a negative value in a column expected to be non-negative: orthophosphate
+(10), ammonia (2), biochemical oxygen demand (2) and pH (1). A concentration cannot be
+negative physically, but a negative \emph{reported} result is not necessarily a
+transcription error, since blank-corrected analytical results near the detection limit can
+take small negative values. We were unable to establish the reporting conventions of the
+contributing monitoring programmes from the distributed data, so these records are flagged
+for review rather than attributed to a particular cause. We note that the screened column
+set includes pH, a logarithmic activity rather than a concentration; the single negative
+pH value is consequently captured by both this flag and the pH range flag.
+
+\paragraph{Sub-zero temperature}
+32 records fall below $0^\circ$C, with a minimum of $-5.26^\circ$C. These are flagged
+separately and deliberately excluded from the aggregate anomaly indicator, because
+sub-zero water temperature is physically possible: water at 35\,ppt salinity freezes near
+$-2^\circ$C~\cite{noaa_seawater}. That is a statement about saline water in general and
+not about these particular records, 30 of which are English and 23 of which are rivers,
+with salinity unknown to us. The separation records our uncertainty rather than an
+assertion that the readings are valid.
+
+\paragraph{Exact duplicates}
+9{,}971 rows (0.35\%) are identical across all 14 original columns and are removed, leaving
+2{,}818{,}006 records. This is the only rule that deletes data. Duplicates are matched on
+the source columns alone, excluding the flags and the parsed date we derive, so that the
+definition depends on the distributed data rather than on our own processing. Identical
+records carry no additional information and would place the same observation on both sides
+of any partition.
+
+\paragraph{No imputation at this stage}
+No values are imputed during cleaning. Imputation must be fitted on the training split
+alone, and that split does not exist at this point in the pipeline; performing it here
+would compute statistics across records destined for the test set.
 
 \subsection{An Upstream Imputation Artefact}
 \label{sec:imputation}

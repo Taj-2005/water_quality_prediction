@@ -72,8 +72,13 @@ measurement distribution produces:
 | `Nitrogen (mg/l)` | 5.0 | 408,683 | 14.45 % | no (median 4.0) |
 | `Orthophosphate (mg/l)` | 0.144 | 444,269 | 15.71 % | no (median 0.107) |
 
-**Conclusion:** missing values were median-imputed before the dataset reached us. Up to
-31.6 % of `Dissolved Oxygen` is therefore synthetic rather than measured.
+**What is observed:** five of eight measurement columns place 11–32 % of their mass on a
+single value that is also the column median.
+
+**What is inferred:** that missing values were median-imputed before the dataset reached
+us. This is the most parsimonious explanation of the pattern, but it is an inference — we
+cannot identify which individual records were originally absent, and the distributed data
+cannot confirm the upstream mechanism.
 
 Two consequences the report must state:
 
@@ -132,20 +137,93 @@ measurement column. All eight measurement columns parse as pure floats. The plan
 detection-limit rule is therefore a documented negative result, not a cleaning step — the
 upstream harmonization already resolved censored values, by means we cannot see.
 
-### Impossible values
+### Anomaly screening
 
-Flagged, never deleted, per the work plan:
+Observations outside the thresholds below are **flagged and retained**, never deleted.
+The flags mark records as *potentially anomalous and warranting review*; apart from the
+duplicate rule, none of them establishes that a reading is erroneous. Rows are kept so the
+decision to exclude them stays with the modelling pipeline, where it is visible.
 
-| Flag column | Rows affected | Rule |
-| :--- | :--- | :--- |
-| `flag_ph_out_of_range` | 505 | pH outside 0–14; observed min −1.0, max 30.0 |
-| `flag_negative_measurement` | 15 | negative value in any non-temperature measurement (ammonia 2, BOD 2, orthophosphate 10, pH 1) |
-| `flag_temp_implausible` | 7,284 | temperature above 40 °C; observed max 98 °C, impossible for surface water |
-| `flag_temp_below_zero` | 32 | temperature below 0 °C — retained and *not* counted as impossible, since saline water can be sub-zero |
-| `flag_any_impossible` | 7,676 | union of the three impossible-value flags above |
+| Flag column | Rows | Screening rule | Status of the threshold |
+| :--- | ---: | :--- | :--- |
+| `flag_ph_out_of_range` | 505 | pH outside 0–14 (504 above 14, max 30.0; 1 below 0, min −1.0) | **Convention, not a physical bound** — see below |
+| `flag_negative_measurement` | 15 | negative value in any non-temperature measurement: orthophosphate 10, ammonia 2, BOD 2, pH 1 | Physically non-negative quantities; cause not established |
+| `flag_temp_implausible` | 7,284 | temperature above 40 °C (observed max 98 °C) | **Project-specific screening heuristic** — no standard supports this exact value |
+| `flag_temp_below_zero` | 32 | temperature below 0 °C (min −5.26 °C) | Review only — **deliberately excluded** from `flag_any_impossible` |
+| `flag_any_impossible` | 7,676 | union of the first three flags | Aggregate indicator |
 
-After duplicate removal the cleaned table is **2,818,006 rows × 20 columns** (14 original
-+ `Date_parsed` + 5 flags), written to `data/processed/clean.csv` (434 MB, git-ignored).
+The cleaned table is **2,818,006 rows × 30 columns** (14 original + `Date_parsed` + 5
+anomaly flags + 10 upstream-imputation columns), written to
+`data/processed/clean.parquet` (45 MB, committed) and optionally
+`data/processed/clean.csv` (559 MiB, git-ignored).
+
+#### pH: a convention rather than a limit
+
+0–14 is the conventional scale for natural water
+([USGS, *pH and Water*](https://www.usgs.gov/special-topics/water-science-school/science/ph-and-water)),
+but pH is defined as −log₁₀(a_H⁺) and is not bounded by it. Environmental waters as acidic
+as pH −3.6 have been measured in acid mine drainage
+([Nordstrom et al. 2000](https://doi.org/10.1021/es990646v)). These 505 records are
+therefore implausible for routine ambient monitoring, not impossible.
+
+#### Temperature: why 40 °C, and what it is not
+
+**No published standard supports a 40 °C cutoff, and it is not a physical limit for
+surface water.** The USGS documents thermal springs discharging at 50 °C and boiling at
+93 °C in a California creek
+([Farrar 2007, USGS Fact Sheet 2007-3045](https://pubs.usgs.gov/fs/2007/3045/fs2007-3045.pdf)).
+The threshold is justified only by the character of this corpus — routine ambient
+monitoring, not geothermal survey.
+
+Two pieces of internal evidence suggest these records are a *recording artefact* rather
+than extreme measurements. Reproduce both with `python -m src.sensitivity_temperature`.
+
+| Country | Rows > 40 °C | % of that country's rows | Median as reported | Median if read as °F | % in 0–35 °C band if °F |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| USA | 6,970 | 1.6843 % | 63.00 °C | 17.22 °C | **99.99 %** |
+| Ireland | 180 | 0.0766 % | 46.40 °C | 8.00 °C | 97.22 % |
+| England | 132 | 0.0062 % | 48.45 °C | 9.14 °C | 96.21 % |
+| Canada | 2 | 0.0506 % | 65.33 °C | 18.52 °C | 100.00 % |
+
+95.7 % of flagged records are from the USA, and converting them as Fahrenheit yields a
+median of 17.2 °C against 11.1 °C for unflagged US records. A unit-coding error confined
+largely to one national programme is the most parsimonious explanation. **It remains a
+hypothesis** — the distributed data cannot confirm it — and no value is corrected.
+
+**Sensitivity to the cutoff** (`results/temperature_sensitivity.csv`):
+
+| Cutoff | Rows flagged | % of dataset | vs default |
+| ---: | ---: | ---: | ---: |
+| 30 °C | 8,918 | 0.3153 % | +1,634 |
+| 35 °C | 7,576 | 0.2679 % | +292 |
+| **40 °C** | **7,284** | **0.2576 %** | — |
+| 45 °C | 6,818 | 0.2411 % | −466 |
+| 50 °C | 5,979 | 0.2114 % | −1,305 |
+
+35 °C and 45 °C differ by 758 records — 0.027 % of the corpus. **No conclusion in this
+project depends on the choice within that range.**
+
+#### Negative values: flagged, cause not established
+
+A concentration cannot be negative physically. A negative *reported* result is not
+necessarily a transcription error, however, since blank-corrected analytical results near
+the detection limit can take small negative values. We could not establish the reporting
+conventions of the contributing programmes from the distributed data, so these 15 records
+are flagged for review rather than attributed to a cause, and none is deleted.
+
+*Known imprecision, documented rather than changed:* the screened column set
+(`NON_NEGATIVE` in `src/clean.py`) includes pH, which is a logarithmic activity rather
+than a concentration. The single negative pH value is therefore counted by both
+`flag_negative_measurement` and `flag_ph_out_of_range`. The flag semantics are consumed by
+downstream preprocessing and the ablation study, so they are left unchanged.
+
+#### Sub-zero temperature: separated because we are uncertain
+
+Sub-zero water temperature is physically possible — water at 35 ppt salinity freezes near
+−2 °C ([NOAA, *Sea Water*](https://www.noaa.gov/jetstream/ocean/sea-water)). That is a
+statement about saline water in general and **not** about these records: 30 of the 32 are
+English and 23 are rivers, whose salinity is unknown to us. The separate flag records our
+uncertainty; it does not assert the readings are valid.
 
 ### Duplicates
 
@@ -172,7 +250,8 @@ Each decision with its reason. Mirrors the log in `notebooks/01_cleaning.ipynb`.
 | `Date` parsed to `datetime64`, original string retained | Parth's split may key on time; parsing once here avoids five people reparsing inconsistently |
 | Detection-limit rule: none applied | No censored values exist in the measurement columns (verified above) |
 | Unit conversions: none applied | All measurement columns already share one unit per column (mg/l, pH units, °C); no mixed-unit rows found |
-| Impossible values flagged, rows retained | Work plan rule — deleting them would hide a data-quality problem the report must discuss |
-| Upstream-imputed values flagged, rows retained | Lets the team quantify the effect in ablation rather than inherit it invisibly |
+| Anomalous values flagged, rows retained | Deleting them would hide a data-quality problem the report must discuss, and would move a modelling decision into the cleaning step. The flags mark records for review; they do not establish error |
+| 40 °C temperature cutoff | **Project-specific heuristic, not a standard.** Insensitive to the exact value (35/40/45 °C → 7,576/7,284/6,818 rows) |
+| Suspected upstream imputation flagged, rows retained | The repeated-value pattern is observed; median imputation is the inference drawn from it. Flagging lets the team quantify the effect in ablation rather than inherit it invisibly |
 | Exact duplicates removed | 9,971 rows; identical across all 14 columns, so they add no information and would inflate any split |
 | No imputation performed | Belongs in `src/preprocess.py`, fitted on the training split only |

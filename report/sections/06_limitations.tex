@@ -19,10 +19,26 @@ that this is a bounded target rather than a censored one
 (Section~\ref{sec:ceiling}): no latent value exists above 100, so the remedy is
 stratified reporting, not a censored-regression estimator.
 
-\paragraph{Imputation cannot be undone}
-Up to 31.6\% of individual measurement columns were median-filled before publication
-(Section~\ref{sec:imputation}). The original missingness pattern is unrecoverable, so the
-mechanism cannot be classified as MCAR, MAR or MNAR. Because the fill is concentrated in
+\paragraph{Cleaning thresholds are screens, not determinations}
+The anomaly flags described in Section~\ref{sec:cleaning} identify observations for
+review; they do not establish that a reading is wrong. The $40^\circ$C temperature cutoff
+in particular is a project-specific heuristic rather than a published standard, since
+natural surface water exceeds it~\cite{farrar2007hotcreek}, and the $0$--$14$ pH interval
+is a convention rather than a physical bound~\cite{nordstrom2000negativeph}. The
+Fahrenheit unit-coding explanation we advance for the high-temperature records is
+consistent with their national and numerical distribution but cannot be confirmed from the
+distributed data, and we did not establish the reporting conventions behind the 15 negative
+values. A 0.26\% subset of records is therefore flagged on evidence we can describe but
+not fully adjudicate.
+
+\paragraph{The original missingness pattern cannot be recovered}
+What we observe directly is a repeated-value pattern: five of eight measurement columns
+carry their own exact median as their modal value, at 11--32\% of records
+(Section~\ref{sec:imputation}). That upstream median imputation produced this pattern is
+an inference from that evidence, not an established property of the upstream pipeline, and
+we make no claim to have recovered which individual values were originally absent. Because
+a filled value is indistinguishable from a measured one in the distributed data, the
+missingness mechanism cannot be classified as MCAR, MAR or MNAR. Because the fill is concentrated in
 England, fill status, country and target are mutually confounded, and no split design
 removes this.
 
