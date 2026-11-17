@@ -153,7 +153,14 @@ water_quality_prediction/
 │   ├── models_rf.py             # Random Forest
 │   ├── models_xgb.py            # XGBoost
 │   ├── evaluation.py            # shared evaluation helpers
-│   └── run_evaluation.py        # one pass producing everything in results/
+│   ├── run_evaluation.py        # one pass producing everything in results/
+│   └── dl/                      # Phase 2 deep learning foundation (Parth)
+│       ├── __init__.py          # public package exports
+│       ├── seeds.py             # set_seed() across Python, NumPy, PyTorch
+│       ├── data.py              # WaterQualityDataset, get_loaders()
+│       └── train.py             # reusable train() loop, early stopping, dl_runs.csv logger
+├── scripts/
+│   └── smoke_test_dl.py         # Phase 2 DL CPU verification & smoke test
 ├── results/                     # AUTHORITATIVE - cite these. See results/README.md
 │   ├── metrics.csv              # headline comparison of the three models
 │   ├── partial_measurement_results.csv   # the four availability regimes
@@ -243,6 +250,30 @@ The raw dataset is tracked with Git LFS, so a fresh clone needs:
 ```bash
 git lfs install && git lfs pull
 ```
+
+### Phase 2 setup
+
+Phase 2 deep learning requirements use PyTorch (`torch>=2.1`, enabled in `requirements.txt`).
+
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Run the CPU smoke test & verification:**
+   To verify that data loaders load the exact Phase 1 split indices, the loss strictly decreases, seeds remain deterministic, and run logging succeeds:
+   ```bash
+   python scripts/smoke_test_dl.py
+   # or with pytest
+   pytest tests/test_dl.py -v
+   ```
+
+3. **Running on GPU (Google Colab or Kaggle):**
+   Full-epoch training across 1,986,397 training rows is compute-intensive on CPU (~2–3 minutes per epoch). If local training is slow:
+   - Run on a free GPU in **Google Colab** (T4 GPU) or **Kaggle Notebooks** (P100 / T4×2).
+   - In Colab: `Runtime` -> `Change runtime type` -> select `T4 GPU`.
+   - The training loop and `get_loaders` will automatically detect and utilize CUDA/MPS when available (`device="cuda"` or `device="mps"`), cutting per-epoch runtime significantly.
+   - For fast local iterations on CPU or laptops, use `subsample=10000` or `batch_size=512`.
 
 ---
 
