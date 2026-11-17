@@ -106,7 +106,9 @@ def log_run(
     if target_csv.exists() and target_csv.stat().st_size > 0:
         existing_df = pd.read_csv(target_csv)
         if "scale_target" not in existing_df.columns:
-            loc = list(existing_df.columns).index("seed") + 1 if "seed" in existing_df.columns else 3
+            loc = (
+                list(existing_df.columns).index("seed") + 1 if "seed" in existing_df.columns else 3
+            )
             existing_df.insert(loc, "scale_target", False)
         combined_df = pd.concat([existing_df, df_row], ignore_index=True)
         combined_df.to_csv(target_csv, index=False)

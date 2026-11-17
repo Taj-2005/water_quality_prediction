@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -22,7 +21,6 @@ from torch.utils.data import DataLoader, Dataset
 from src.config import DATA_SPLITS, SEED
 from src.dl.seeds import seed_worker, set_seed
 from src.evaluate_api import get_splits
-from src.split import SPLITS_CSV, SPLITS_PARQUET
 
 
 class WaterQualityDataset(Dataset):

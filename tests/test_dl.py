@@ -15,9 +15,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
+pytest.importorskip("torch", reason="PyTorch is required for deep learning tests")
+pytest.importorskip("sklearn", reason="scikit-learn is required for deep learning tests")
+
 import torch
 import torch.nn as nn
 
+from src.config import DATA_SPLITS
 from src.dl.data import WaterQualityDataset, get_loaders
 from src.dl.seeds import set_seed
 from src.dl.train import log_run, train
@@ -45,6 +50,12 @@ class TinyPlaceholderMLP(nn.Module):
 class TestDLFoundation:
     def test_split_sizes_match_phase1_indices(self):
         """Confirm that get_loaders consumes the exact Phase 1 split indices."""
+        if (
+            not (DATA_SPLITS / "splits.parquet").exists()
+            and not (DATA_SPLITS / "splits.csv").exists()
+        ):
+            pytest.skip("Phase 1 splits not available on disk (CI runner)")
+
         splits = load_splits()
         assert len(splits) == 2_818_006
 
@@ -155,7 +166,7 @@ class TestDLFoundation:
         run1_losses, run1_rmse = results[0]
         run2_losses, run2_rmse = results[1]
 
-        for l1, l2 in zip(run1_losses, run2_losses):
+        for l1, l2 in zip(run1_losses, run2_losses, strict=True):
             assert np.isclose(l1, l2, atol=1e-5), f"Loss mismatch: {l1} vs {l2}"
         assert np.isclose(run1_rmse, run2_rmse, atol=1e-5)
 
@@ -194,6 +205,12 @@ class TestDLFoundation:
 
     def test_target_stats_from_train_only(self):
         """Verify that y_mean and y_std are computed strictly from the train split."""
+        if (
+            not (DATA_SPLITS / "splits.parquet").exists()
+            and not (DATA_SPLITS / "splits.csv").exists()
+        ):
+            pytest.skip("Phase 1 splits not available on disk (CI runner)")
+
         from src.evaluate_api import get_splits
 
         # 1. Direct Phase 1 splits
@@ -300,14 +317,28 @@ class TestDLFoundation:
                 "log_to_csv": False,
                 "verbose": False,
             }
-            hist_unscaled, val_metrics_unscaled = train(model_unscaled, loaders_unscaled, cfg_unscaled)
+            hist_unscaled, val_metrics_unscaled = train(
+                model_unscaled, loaders_unscaled, cfg_unscaled
+            )
 
         # 1. Validation loss scales differ: scaled val loss is O(1), unscaled is O(1000)
-        assert hist_scaled["val_loss"][-1] < 50.0, f"Scaled val_loss unexpectedly high: {hist_scaled['val_loss'][-1]}"
-        assert hist_unscaled["val_loss"][-1] > 500.0, f"Unscaled val_loss unexpectedly low: {hist_unscaled['val_loss'][-1]}"
+        assert hist_scaled["val_loss"][-1] < 50.0, (
+            f"Scaled val_loss unexpectedly high: {hist_scaled['val_loss'][-1]}"
+        )
+        assert hist_unscaled["val_loss"][-1] > 500.0, (
+            f"Unscaled val_loss unexpectedly low: {hist_unscaled['val_loss'][-1]}"
+        )
 
         # 2. But logged metrics (MAE, RMSE) are on the ORIGINAL 0-100 scale for BOTH runs!
-        assert 1.0 < val_metrics_scaled["mae"] < 100.0, f"Scaled MAE not on original scale: {val_metrics_scaled['mae']}"
-        assert 1.0 < val_metrics_unscaled["mae"] < 100.0, f"Unscaled MAE not on original scale: {val_metrics_unscaled['mae']}"
-        assert 1.0 < val_metrics_scaled["rmse"] < 100.0, f"Scaled RMSE not on original scale: {val_metrics_scaled['rmse']}"
-        assert 1.0 < val_metrics_unscaled["rmse"] < 100.0, f"Unscaled RMSE not on original scale: {val_metrics_unscaled['rmse']}"
+        assert 1.0 < val_metrics_scaled["mae"] < 100.0, (
+            f"Scaled MAE not on original scale: {val_metrics_scaled['mae']}"
+        )
+        assert 1.0 < val_metrics_unscaled["mae"] < 100.0, (
+            f"Unscaled MAE not on original scale: {val_metrics_unscaled['mae']}"
+        )
+        assert 1.0 < val_metrics_scaled["rmse"] < 100.0, (
+            f"Scaled RMSE not on original scale: {val_metrics_scaled['rmse']}"
+        )
+        assert 1.0 < val_metrics_unscaled["rmse"] < 100.0, (
+            f"Unscaled RMSE not on original scale: {val_metrics_unscaled['rmse']}"
+        )
