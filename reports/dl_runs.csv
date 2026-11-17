@@ -1,0 +1,2 @@
+timestamp,experiment_label,seed,epochs_trained,best_epoch,batch_size,learning_rate,weight_decay,optimizer,scheduler,best_val_loss,val_mae,val_rmse,val_r2,test_mae,test_rmse,test_r2
+2026-11-17T21:04:06.310850+00:00,smoke_test_verification,42,3,3,256,0.005,0.0001,adamw,none,6440.347351,78.487851,80.251775,-17.708224,,,
