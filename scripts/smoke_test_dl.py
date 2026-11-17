@@ -117,7 +117,7 @@ def run_smoke_test(device_str: str = "cpu", subsample: int = 1000) -> None:
     # 3. Determinism verification (same seed gives identical results)
     print("\n[3/4] Verifying seed determinism (running 2 epochs twice)...")
     runs = []
-    for run_idx in (1, 2):
+    for _run_idx in (1, 2):
         set_seed(999)
         l_det, _ = get_loaders(
             batch_size=64,
@@ -143,7 +143,7 @@ def run_smoke_test(device_str: str = "cpu", subsample: int = 1000) -> None:
 
     for i in range(len(runs[0][0])):
         assert np.isclose(runs[0][0][i], runs[1][0][i], atol=1e-5), (
-            f"Epoch {i+1} loss mismatch between runs: {runs[0][0][i]} vs {runs[1][0][i]}"
+            f"Epoch {i + 1} loss mismatch between runs: {runs[0][0][i]} vs {runs[1][0][i]}"
         )
     assert np.isclose(runs[0][1], runs[1][1], atol=1e-5), "RMSE mismatch between deterministic runs"
     print(f"  Run 1 train losses: {[round(x, 4) for x in runs[0][0]]}, RMSE: {runs[0][1]:.4f}")
