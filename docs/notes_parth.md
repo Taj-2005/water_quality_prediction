@@ -350,3 +350,5 @@ Parthraj Singh Bhati designed and implemented the foundational data architecture
    Validation and test evaluation use the shared `from src.evaluate_api import evaluate`, logging to `reports/dl_runs.csv`.
 6. **Hardware Flexibility**:
    Auto-resolves compute devices (`cpu`, `cuda`, `mps`) while supporting deterministic CPU execution for reproducible testing.
+7. **Train-Only Target Standardization (`scale_target=True`)**:
+   `get_loaders()` computes target statistics strictly from the training split (`y_train.mean()`, `y_train.std()`) and exposes them on `loaders.y_mean` and `loaders.y_std`. The training loop operates on normalized targets for well-conditioned gradient dynamics, while `train()` automatically inverse-transforms model predictions back to the original $0$ to $100$ scale before invoking `src.evaluate_api.evaluate()`. Checkpoints persist `y_mean`, `y_std`, and `scale_target`, and `reports/dl_runs.csv` tracks the configuration.

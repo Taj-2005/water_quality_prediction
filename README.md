@@ -268,7 +268,10 @@ Phase 2 deep learning requirements use PyTorch (`torch>=2.1`, enabled in `requir
    pytest tests/test_dl.py -v
    ```
 
-3. **Running on GPU (Google Colab or Kaggle):**
+3. **Target Standardization (`scale_target=True`):**
+   `get_loaders()` computes target statistics strictly from the training split (`loaders.y_mean`, `loaders.y_std`) and standardizes continuous `CCME_Values` targets for well-conditioned gradient flow. The training loop trains on scaled targets for stability, while `train()` automatically inverse-transforms model predictions back to the canonical $0$ to $100$ scale before computing shared `evaluate()` metrics (`mae`, `rmse`, $R^2$). Target parameters are persisted within model checkpoints.
+
+4. **Running on GPU (Google Colab or Kaggle):**
    Full-epoch training across 1,986,397 training rows is compute-intensive on CPU (~2–3 minutes per epoch). If local training is slow:
    - Run on a free GPU in **Google Colab** (T4 GPU) or **Kaggle Notebooks** (P100 / T4×2).
    - In Colab: `Runtime` -> `Change runtime type` -> select `T4 GPU`.

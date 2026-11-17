@@ -86,6 +86,7 @@ class LoadersBundle(dict):
     """Container holding train, validation, and test PyTorch DataLoaders.
 
     Supports dictionary lookup (`loaders['train']`), attribute access (`loaders.train`),
+    target standardization parameters (`loaders.y_mean`, `loaders.y_std`),
     and 3-tuple iterable unpacking:
         train_loader, val_loader, test_loader = loaders
     """
@@ -95,11 +96,17 @@ class LoadersBundle(dict):
         train: DataLoader,
         val: DataLoader,
         test: DataLoader,
+        y_mean: float = 0.0,
+        y_std: float = 1.0,
+        scale_target: bool = False,
     ) -> None:
         super().__init__({"train": train, "val": val, "test": test})
         self.train = train
         self.val = val
         self.test = test
+        self.y_mean = float(y_mean)
+        self.y_std = float(y_std)
+        self.scale_target = bool(scale_target)
 
     def __iter__(self) -> Iterator[DataLoader]:
         yield self.train
@@ -113,6 +120,7 @@ def get_loaders(
     splits_dir: Path | str | None = None,
     include_metadata: bool = True,
     scale_numeric: bool = True,
+    scale_target: bool = True,
     partial_scenario: str | Sequence[str] | None = None,
     subsample: int | float | None = None,
     num_workers: int = 0,
@@ -138,6 +146,8 @@ def get_loaders(
         Whether to include non-chemical metadata covariates (Country, Waterbody Type).
     scale_numeric : bool, default True
         Whether to z-score standardize numeric measurements using train statistics.
+    scale_target : bool, default True
+        Whether to z-score standardize continuous target CCME_Values using train statistics only.
     partial_scenario : str | Sequence[str] | None, optional
         Partial measurement scenario ('8/8', '7/8', '6/8', '4/8').
     subsample : int | float | None, optional
@@ -216,16 +226,31 @@ def get_loaders(
         X_val_arr = X_val.to_numpy(dtype=np.float32)
         X_test_arr = X_test.to_numpy(dtype=np.float32)
 
-    y_train_arr = y_train.to_numpy(dtype=np.float32)
-    y_val_arr = y_val.to_numpy(dtype=np.float32)
-    y_test_arr = y_test.to_numpy(dtype=np.float32)
+    y_train_raw = y_train.to_numpy(dtype=np.float32)
+    y_val_raw = y_val.to_numpy(dtype=np.float32)
+    y_test_raw = y_test.to_numpy(dtype=np.float32)
 
-    # 6. Wrap into PyTorch Datasets
+    # 6. Target standardization parameters computed STRICTLY from train split
+    y_mean = float(np.mean(y_train_raw))
+    y_std = float(np.std(y_train_raw))
+    if y_std == 0.0 or np.isnan(y_std):
+        y_std = 1.0
+
+    if scale_target:
+        y_train_arr = (y_train_raw - y_mean) / y_std
+        y_val_arr = (y_val_raw - y_mean) / y_std
+        y_test_arr = (y_test_raw - y_mean) / y_std
+    else:
+        y_train_arr = y_train_raw.copy()
+        y_val_arr = y_val_raw.copy()
+        y_test_arr = y_test_raw.copy()
+
+    # 7. Wrap into PyTorch Datasets
     train_dataset = WaterQualityDataset(X_train_arr, y_train_arr)
     val_dataset = WaterQualityDataset(X_val_arr, y_val_arr)
     test_dataset = WaterQualityDataset(X_test_arr, y_test_arr)
 
-    # 7. Seeded generator for DataLoader shuffle determinism
+    # 8. Seeded generator for DataLoader shuffle determinism
     g = torch.Generator()
     g.manual_seed(seed)
 
@@ -257,5 +282,12 @@ def get_loaders(
     )
 
     input_dim = int(X_train_arr.shape[1])
-    loaders = LoadersBundle(train_loader, val_loader, test_loader)
+    loaders = LoadersBundle(
+        train_loader,
+        val_loader,
+        test_loader,
+        y_mean=y_mean,
+        y_std=y_std,
+        scale_target=scale_target,
+    )
     return loaders, input_dim

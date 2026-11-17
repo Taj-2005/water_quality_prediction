@@ -68,6 +68,7 @@ def log_run(
     best_epoch: int,
     best_val_loss: float,
     test_metrics: dict[str, float] | None = None,
+    scale_target: bool = False,
     csv_path: Path | str | None = None,
 ) -> Path:
     """Append experiment run metadata, hyperparameters, and evaluation metrics to dl_runs.csv."""
@@ -78,6 +79,7 @@ def log_run(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "experiment_label": config.get("experiment_label", config.get("model_name", "dl_model")),
         "seed": seed,
+        "scale_target": bool(scale_target),
         "epochs_trained": epochs_trained,
         "best_epoch": best_epoch,
         "batch_size": config.get("batch_size", 256),
@@ -102,9 +104,14 @@ def log_run(
 
     df_row = pd.DataFrame([row])
     if target_csv.exists() and target_csv.stat().st_size > 0:
-        df_row.to_csv(target_csv, mode="a", header=False, index=False)
+        existing_df = pd.read_csv(target_csv)
+        if "scale_target" not in existing_df.columns:
+            loc = list(existing_df.columns).index("seed") + 1 if "seed" in existing_df.columns else 3
+            existing_df.insert(loc, "scale_target", False)
+        combined_df = pd.concat([existing_df, df_row], ignore_index=True)
+        combined_df.to_csv(target_csv, index=False)
     else:
-        df_row.to_csv(target_csv, mode="w", header=True, index=False)
+        df_row.to_csv(target_csv, index=False)
 
     return target_csv
 
@@ -114,6 +121,9 @@ def evaluate_loader(
     loader: DataLoader,
     criterion: nn.Module,
     device: torch.device,
+    y_mean: float = 0.0,
+    y_std: float = 1.0,
+    scale_target: bool = False,
 ) -> tuple[float, dict[str, float]]:
     """Evaluate a DataLoader and return average loss plus shared evaluate() metrics.
 
@@ -127,6 +137,12 @@ def evaluate_loader(
         Loss function.
     device : torch.device
         Compute device.
+    y_mean : float, default 0.0
+        Mean used to standardize targets (train split only).
+    y_std : float, default 1.0
+        Standard deviation used to standardize targets (train split only).
+    scale_target : bool, default False
+        Whether predictions and targets should be inverse-transformed before evaluate().
 
     Returns
     -------
@@ -163,7 +179,15 @@ def evaluate_loader(
     if y_trues:
         y_true_cat = np.concatenate(y_trues, axis=0).ravel()
         y_pred_cat = np.concatenate(y_preds, axis=0).ravel()
-        metrics = evaluate(y_true_cat, y_pred_cat)
+
+        if scale_target:
+            y_true_eval = y_true_cat * y_std + y_mean
+            y_pred_eval = y_pred_cat * y_std + y_mean
+        else:
+            y_true_eval = y_true_cat
+            y_pred_eval = y_pred_cat
+
+        metrics = evaluate(y_true_eval, y_pred_eval)
     else:
         metrics = {}
 
@@ -238,6 +262,11 @@ def train(
 
     if train_loader is None or val_loader is None:
         raise ValueError("loaders must provide both 'train' and 'val' DataLoaders.")
+
+    # Target scaling parameters
+    scale_target = bool(cfg.get("scale_target", getattr(loaders, "scale_target", False)))
+    y_mean = float(cfg.get("y_mean", getattr(loaders, "y_mean", 0.0)))
+    y_std = float(cfg.get("y_std", getattr(loaders, "y_std", 1.0)))
 
     # 2. Resolve compute device and move model
     device = get_device(cfg.get("device"))
@@ -335,7 +364,15 @@ def train(
         epoch_train_loss = running_train_loss / max(train_samples, 1)
 
         # Validation step
-        val_loss, val_metrics = evaluate_loader(model, val_loader, criterion, device)
+        val_loss, val_metrics = evaluate_loader(
+            model,
+            val_loader,
+            criterion,
+            device,
+            y_mean=y_mean,
+            y_std=y_std,
+            scale_target=scale_target,
+        )
 
         # Update scheduler
         current_lr = float(optimizer.param_groups[0]["lr"])
@@ -381,6 +418,9 @@ def train(
                     "val_metrics": best_val_metrics,
                     "config": cfg,
                     "seed": seed,
+                    "y_mean": y_mean,
+                    "y_std": y_std,
+                    "scale_target": scale_target,
                 },
                 checkpoint_path,
             )
@@ -404,7 +444,15 @@ def train(
     # 9. Optional test set evaluation
     test_metrics: dict[str, float] | None = None
     if test_loader is not None and bool(cfg.get("eval_test", False)):
-        _, test_metrics = evaluate_loader(model, test_loader, criterion, device)
+        _, test_metrics = evaluate_loader(
+            model,
+            test_loader,
+            criterion,
+            device,
+            y_mean=y_mean,
+            y_std=y_std,
+            scale_target=scale_target,
+        )
         if verbose:
             print(
                 f"Final Test Evaluation: MAE={test_metrics.get('mae', 0.0):.4f}, "
@@ -422,6 +470,7 @@ def train(
             best_epoch=best_epoch,
             best_val_loss=best_val_loss,
             test_metrics=test_metrics,
+            scale_target=scale_target,
             csv_path=cfg.get("csv_path"),
         )
 
