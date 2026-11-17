@@ -23,6 +23,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+# Standalone scripts must extend sys.path before importing from src/, so their
+# imports legitimately sit below executable code.
+"scripts/*.py" = ["E402"]
 # Stubs intentionally accept arguments they do not use yet.
 "src/preprocess.py" = ["ARG001"]
 "src/features.py" = ["ARG001"]

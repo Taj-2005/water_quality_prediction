@@ -31,6 +31,7 @@ from src.models_rf import (
     get_experiment_label,
     train,
 )
+from tests.conftest import requires_phase1_splits
 
 
 class TestMetricFallback:
@@ -197,6 +198,7 @@ class TestExperimentLabeling:
         assert "independent_environmental_prediction" in label
 
 
+@requires_phase1_splits
 class TestTrainExecution:
     def test_train_baseline_with_subsample(self):
         results = train(

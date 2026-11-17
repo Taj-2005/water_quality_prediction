@@ -33,15 +33,21 @@ jobs:
         # Deliberately not the full requirements.txt: xgboost, shap, optuna and jupyter
         # add minutes to every run and none of them are needed to lint or to test the
         # cleaning rules. The modelling stack is exercised locally and in the notebooks.
+        #
+        # torch IS installed, from the CPU-only index. tests/test_dl.py opens with
+        # pytest.importorskip("torch"), so without it every Phase 2 deep-learning test
+        # silently skips and the module four people build on goes untested. The CPU
+        # wheel is a fraction of the default CUDA build, which keeps the run short.
         run: |
           python -m pip install --upgrade pip
-          pip install ruff pytest pandas numpy
+          pip install ruff pytest pandas numpy scikit-learn
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Lint
-        run: ruff check src/ tests/
+        run: ruff check src/ tests/ scripts/
 
       - name: Format check
-        run: ruff format --check src/ tests/
+        run: ruff format --check src/ tests/ scripts/
 
       - name: Tests
         run: pytest tests/ -v

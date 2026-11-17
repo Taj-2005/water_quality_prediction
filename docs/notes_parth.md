@@ -325,3 +325,30 @@ Parthraj Singh Bhati designed and implemented the foundational data architecture
 4. **Unified Data Access**: Created `get_splits()` (`src/evaluate_api.py`), serving standardized preprocessed partitions to all teammate models in ~1.5s.
 5. **Orchestrated Final Evaluation**: Engineered `src/evaluation.py` and `src/run_evaluation.py`, producing verified benchmarks, harmonized full-data partial measurement sweeps, full-data feature engineering ablations ($-18.1\%$ RMSE), full-data upstream imputation ablations ($-0.65\%$ delta), error analyses, bootstrap confidence intervals, and publication figures.
 6. **Maintained Strict QA**: Authored 26 dedicated unit tests, ensuring 100% test pass rates across the 130-test repository suite.
+
+---
+
+## 21. Phase 2 Deep Learning Foundation (`src/dl/`)
+
+### Division of Responsibility in Phase 2
+- **Parthraj Singh Bhati (This Record)**: Deep learning foundation (`src/dl/`): seeds and determinism (`seeds.py`), PyTorch Dataset and DataLoaders (`data.py`), reusable training loop with early stopping, checkpointing, and run logging (`train.py`), package API (`__init__.py`), unit tests (`tests/test_dl.py`), and CPU smoke test script (`scripts/smoke_test_dl.py`).
+- **Himanshu Pandey**: Base MLP architecture and ablations (`src/dl/model.py`, `notebooks/12_base_mlp.ipynb`, `notebooks/14_architecture.ipynb`, `refs_dl.bib`).
+- **Taj**: Regularization cocktail (Dropout, Weight Decay, BatchNorm) and learning rate schedules.
+- **Jivit**: Tabular hybrid model (MLP-on-tree residuals).
+- **Satya**: Uncertainty estimation, MC Dropout calibration, and final Phase 2 IEEE report.
+
+### Key Engineering Decisions & Guarantees
+1. **Zero Split Regeneration**:
+   `get_loaders()` strictly loads the Phase 1 persisted Area-grouped split indices from `data/splits/splits.parquet` (1,986,397 train / 415,805 val / 415,804 test).
+2. **Train-Only Preprocessing**:
+   Features are transformed via `WaterQualityPreprocessor` with numeric standard scaling (`scale_numeric=True`) and categorical metadata one-hot encoded strictly on `X_train`.
+3. **Regression Loss Function**:
+   Continuous CCME_Values ($y \in [0, 100]$) dictates regression loss: `nn.MSELoss()` by default (supporting `nn.L1Loss()` and `nn.SmoothL1Loss()`).
+4. **Early Stopping & Checkpoint Persistence**:
+   Monitors validation loss with patience and min_delta, saving best model checkpoints to `checkpoints/` (git-ignored) and automatically restoring best weights at completion.
+5. **Shared Metric Evaluation**:
+   Validation and test evaluation use the shared `from src.evaluate_api import evaluate`, logging to `reports/dl_runs.csv`.
+6. **Hardware Flexibility**:
+   Auto-resolves compute devices (`cpu`, `cuda`, `mps`) while supporting deterministic CPU execution for reproducible testing.
+7. **Train-Only Target Standardization (`scale_target=True`)**:
+   `get_loaders()` computes target statistics strictly from the training split (`y_train.mean()`, `y_train.std()`) and exposes them on `loaders.y_mean` and `loaders.y_std`. The training loop operates on normalized targets for well-conditioned gradient dynamics, while `train()` automatically inverse-transforms model predictions back to the original $0$ to $100$ scale before invoking `src.evaluate_api.evaluate()`. Checkpoints persist `y_mean`, `y_std`, and `scale_target`, and `reports/dl_runs.csv` tracks the configuration.
