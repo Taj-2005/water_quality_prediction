@@ -27,6 +27,7 @@ from src.dl.data import WaterQualityDataset, get_loaders
 from src.dl.seeds import set_seed
 from src.dl.train import log_run, train
 from src.split import load_splits
+from tests.conftest import requires_phase1_splits
 
 
 class TinyPlaceholderMLP(nn.Module):
@@ -90,6 +91,7 @@ class TestDLFoundation:
         assert y_sample.dtype == torch.float32
         assert y_sample.shape == torch.Size([1])
 
+    @requires_phase1_splits
     def test_cpu_smoke_test_loss_decreases(self):
         """Run 3 epochs on CPU with a subsample and confirm training loss decreases."""
         set_seed(42)
@@ -133,6 +135,7 @@ class TestDLFoundation:
             assert "r2" in best_val_metrics
             assert Path(tmpdir, "smoke_test.pt").exists()
 
+    @requires_phase1_splits
     def test_seed_determinism(self):
         """Confirm that the exact same seed yields identical losses twice."""
         results = []
@@ -256,6 +259,7 @@ class TestDLFoundation:
 
         assert np.allclose(y_orig, y_reconstructed, atol=1e-5)
 
+    @requires_phase1_splits
     def test_scaled_and_unscaled_runs_report_metrics_on_same_scale(self):
         """Verify that scaled and unscaled runs report metrics on the original 0-100 scale."""
         # Run 1: scale_target = True
