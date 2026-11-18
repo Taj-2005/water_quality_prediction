@@ -1,1 +1,2 @@
 timestamp,experiment_label,seed,scale_target,epochs_trained,best_epoch,batch_size,learning_rate,weight_decay,optimizer,scheduler,best_val_loss,val_mae,val_rmse,val_r2,test_mae,test_rmse,test_r2
+2026-11-18T04:20:08.338113+00:00,base_mlp_baseline,42,True,10,9,256,0.001,0.0001,adamw,plateau,0.010409,1.238533,1.75808,0.991022,,,
