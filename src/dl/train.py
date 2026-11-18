@@ -438,7 +438,7 @@ def train(
 
     # 8. Reload best checkpoint weights into model
     if checkpoint_path.exists():
-        ckpt = torch.load(checkpoint_path, map_location=device)
+        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model.load_state_dict(ckpt["model_state_dict"])
         if verbose:
             print(f"Loaded best checkpoint weights from {checkpoint_path} (epoch {best_epoch}).")
