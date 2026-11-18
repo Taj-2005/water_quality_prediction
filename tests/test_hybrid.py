@@ -15,23 +15,28 @@ import pandas as pd
 import pytest
 
 from src.dl import hybrid
+from src.models_xgb import HAS_XGB
 
-pytestmark = pytest.mark.skipif(not hybrid.hasattr_xgb if hasattr(hybrid, "hasattr_xgb") else False, reason="xgboost test")
+pytestmark = pytest.mark.skipif(not HAS_XGB, reason="xgboost is not available")
 
 QUICK = {"subsample": 2000, "save_reports": False, "n_folds": 2}
 
 
 def test_oof_xgb_predictions_shape_and_leakage_contract():
     """OOF predictions must have identical shape to y_train."""
-    X_train = pd.DataFrame({
-        "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
-        "cat1": pd.Categorical(["a", "b", "a", "b", "a", "b"]),
-    })
+    X_train = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "cat1": pd.Categorical(["a", "b", "a", "b", "a", "b"]),
+        }
+    )
     y_train = pd.Series([10.0, 20.0, 15.0, 25.0, 12.0, 22.0])
-    X_val = pd.DataFrame({
-        "num1": [2.5, 3.5],
-        "cat1": pd.Categorical(["a", "b"]),
-    })
+    X_val = pd.DataFrame(
+        {
+            "num1": [2.5, 3.5],
+            "cat1": pd.Categorical(["a", "b"]),
+        }
+    )
     y_val = pd.Series([18.0, 21.0])
 
     oof_preds, final_xgb = hybrid._oof_xgb_predictions(
@@ -103,9 +108,20 @@ def test_oof_group_leakage_zero_overlap():
     from sklearn.model_selection import GroupKFold
 
     # 10 rows from 5 distinct stations
-    groups = np.array(["Station_A", "Station_A", "Station_B", "Station_B",
-                       "Station_C", "Station_C", "Station_D", "Station_D",
-                       "Station_E", "Station_E"])
+    groups = np.array(
+        [
+            "Station_A",
+            "Station_A",
+            "Station_B",
+            "Station_B",
+            "Station_C",
+            "Station_C",
+            "Station_D",
+            "Station_D",
+            "Station_E",
+            "Station_E",
+        ]
+    )
     X = pd.DataFrame({"feat": np.arange(10.0)})
     y = pd.Series(np.arange(10.0))
 
@@ -143,4 +159,3 @@ if __name__ == "__main__":
         print("Running test_ablation_has_four_conditions...")
         test_ablation_has_four_conditions(p)
     print("All hybrid tests passed successfully!")
-

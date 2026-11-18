@@ -30,7 +30,8 @@ import pandas as pd
 
 from src.config import REPORTS, SEED
 from src.evaluate_api import evaluate, get_splits
-from src.models_xgb import build_model as build_xgb, match_categories
+from src.models_xgb import build_model as build_xgb
+from src.models_xgb import match_categories
 
 # Team-agreed seeds from the literature review (do not change without team consensus).
 AGREED_SEEDS = [42, 123, 456, 789, 1011]
@@ -58,8 +59,9 @@ HYBRID_RESULTS_PATH = REPORTS / "hybrid_results.csv"
 def _try_import_mlp():
     """Return (MLP class, train_fn) if the team's PyTorch MLP is merged, else (None, None)."""
     try:
-        from src.dl.model import MLP          # noqa: PLC0415
+        from src.dl.model import MLP  # noqa: PLC0415
         from src.dl.train import train as mlp_train  # noqa: PLC0415
+
         return MLP, mlp_train
     except ImportError:
         return None, None
@@ -70,6 +72,7 @@ class _StubMLP:
 
     def __init__(self, seed: int = SEED):
         from sklearn.neural_network import MLPRegressor  # noqa: PLC0415
+
         self._model = MLPRegressor(
             hidden_layer_sizes=(256, 128, 64),
             activation="relu",
@@ -83,7 +86,7 @@ class _StubMLP:
             verbose=False,
         )
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "_StubMLP":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> _StubMLP:
         self._model.fit(X, y)
         return self
 
@@ -100,6 +103,7 @@ def _load_train_groups(X_train: pd.DataFrame) -> pd.Series | None:
     """Return the 'Area' (station) Series aligned to X_train's index, or None."""
     try:
         from src.split import get_train_groups  # noqa: PLC0415
+
         groups = get_train_groups()
         if X_train.index.isin(groups.index).all():
             return groups.loc[X_train.index]
@@ -138,6 +142,7 @@ def _oof_xgb_predictions(
     # Choose the splitter: GroupKFold if station groups are available, else KFold.
     if groups is not None:
         from sklearn.model_selection import GroupKFold  # noqa: PLC0415
+
         groups_arr = np.asarray(groups)
         n_groups = len(np.unique(groups_arr))
         effective_folds = min(n_folds, n_groups)
@@ -151,6 +156,7 @@ def _oof_xgb_predictions(
         splits = folder.split(X_train, y_train, groups=groups_arr)
     else:
         from sklearn.model_selection import KFold  # noqa: PLC0415
+
         folder = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
         splits = folder.split(X_train)
 
@@ -199,6 +205,7 @@ def _to_float_array(df: pd.DataFrame) -> np.ndarray:
 def _fit_scaler(X_train_arr: np.ndarray):
     """Fit and return a StandardScaler on the training array."""
     from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
+
     scaler = StandardScaler()
     scaler.fit(X_train_arr)
     return scaler
@@ -273,27 +280,32 @@ def train_hybrid(
     # 2. OOF XGBoost predictions — strictly out-of-site via GroupKFold.
     print(f"[hybrid] Running {n_folds}-fold GroupKFold OOF XGBoost (Area groups) …")
     oof_xgb_pred, final_xgb = _oof_xgb_predictions(
-        X_train, y_train, X_val, y_val,
-        groups=train_groups, n_folds=n_folds, seed=seed,
+        X_train,
+        y_train,
+        X_val,
+        y_val,
+        groups=train_groups,
+        n_folds=n_folds,
+        seed=seed,
     )
 
     # 3. XGBoost predictions on val and test.
     X_tr_m, X_v_m, X_te_m = match_categories(X_train, X_val, X_test)
-    xgb_val_pred  = final_xgb.predict(X_v_m)
+    xgb_val_pred = final_xgb.predict(X_v_m)
     xgb_test_pred = final_xgb.predict(X_te_m)
 
     # 4. Residuals: what XGBoost got wrong.
     train_residuals = np.asarray(y_train) - oof_xgb_pred
-    val_residuals   = np.asarray(y_val)   - xgb_val_pred
+    val_residuals = np.asarray(y_val) - xgb_val_pred
 
     # 5. Scale features for the MLP.
     X_train_arr = _to_float_array(X_train)
-    X_val_arr   = _to_float_array(X_val)
-    X_test_arr  = _to_float_array(X_test)
+    X_val_arr = _to_float_array(X_val)
+    X_test_arr = _to_float_array(X_test)
     scaler = _fit_scaler(X_train_arr)
     X_train_sc = scaler.transform(X_train_arr)
-    X_val_sc   = scaler.transform(X_val_arr)
-    X_test_sc  = scaler.transform(X_test_arr)
+    X_val_sc = scaler.transform(X_val_arr)
+    X_test_sc = scaler.transform(X_test_arr)
 
     # 6. Train MLP on residuals (use team's PyTorch MLP if merged, else stub).
     MLP_cls, mlp_train_fn = _try_import_mlp()
@@ -306,29 +318,27 @@ def train_hybrid(
         mlp = _StubMLP(seed=seed)
         mlp.fit(X_train_sc, train_residuals)
 
-    mlp_val_pred  = mlp.predict(X_val_sc)
+    mlp_val_pred = mlp.predict(X_val_sc)
     mlp_test_pred = mlp.predict(X_test_sc)
 
     elapsed = round(time.perf_counter() - t0, 2)
 
     # 7. Hybrid = XGBoost prediction + MLP residual correction.
-    hybrid_val_pred  = xgb_val_pred  + mlp_val_pred
+    hybrid_val_pred = xgb_val_pred + mlp_val_pred
     hybrid_test_pred = xgb_test_pred + mlp_test_pred
 
     # 8. Evaluate.
     result = {
-        "xgb_val_metrics":          evaluate(y_val,  xgb_val_pred),
-        "xgb_test_metrics":         evaluate(y_test, xgb_test_pred),
-        "hybrid_val_metrics":       evaluate(y_val,  hybrid_val_pred),
-        "hybrid_test_metrics":      evaluate(y_test, hybrid_test_pred),
-        "mlp_residual_test_metrics": evaluate(
-            np.asarray(y_test) - xgb_test_pred, mlp_test_pred
-        ),
-        "xgb_val_pred":    xgb_val_pred,
-        "xgb_test_pred":   xgb_test_pred,
+        "xgb_val_metrics": evaluate(y_val, xgb_val_pred),
+        "xgb_test_metrics": evaluate(y_test, xgb_test_pred),
+        "hybrid_val_metrics": evaluate(y_val, hybrid_val_pred),
+        "hybrid_test_metrics": evaluate(y_test, hybrid_test_pred),
+        "mlp_residual_test_metrics": evaluate(np.asarray(y_test) - xgb_test_pred, mlp_test_pred),
+        "xgb_val_pred": xgb_val_pred,
+        "xgb_test_pred": xgb_test_pred,
         "hybrid_val_pred": hybrid_val_pred,
         "hybrid_test_pred": hybrid_test_pred,
-        "y_val":  np.asarray(y_val),
+        "y_val": np.asarray(y_val),
         "y_test": np.asarray(y_test),
         "timing_seconds": elapsed,
         "config": {
@@ -384,6 +394,7 @@ def run_ablation(
         partial_scenario=partial_scenario if regime == 1 else None,
     )
     from src.split import get_train_groups  # noqa: PLC0415
+
     train_groups_full = get_train_groups()
 
     rows = []
@@ -396,9 +407,8 @@ def run_ablation(
             idx = rng.choice(len(X_train_full), size=subsample, replace=False)
             X_train = X_train_full.iloc[idx]
             y_train = y_train_full.iloc[idx]
-            groups  = train_groups_full.iloc[idx]
         else:
-            X_train, y_train, groups = X_train_full, y_train_full, train_groups_full
+            X_train, y_train = X_train_full, y_train_full
 
         # --- Condition 1: XGBoost alone ---
         X_tr_m, X_v_m, X_te_m = match_categories(X_train, X_val, X_test)
@@ -410,8 +420,8 @@ def run_ablation(
 
         # --- Condition 2: MLP alone (trained on target, not residuals) ---
         X_train_arr = _to_float_array(X_train)
-        X_test_arr  = _to_float_array(X_test)
-        scaler  = _fit_scaler(X_train_arr)
+        X_test_arr = _to_float_array(X_test)
+        scaler = _fit_scaler(X_train_arr)
         X_tr_sc = scaler.transform(X_train_arr)
         X_te_sc = scaler.transform(X_test_arr)
 
@@ -419,8 +429,11 @@ def run_ablation(
         if MLP_cls is not None:
             mlp_alone = MLP_cls(input_dim=X_tr_sc.shape[1], seed=seed)
             mlp_train_fn(
-                mlp_alone, X_tr_sc, np.asarray(y_train),
-                scaler.transform(_to_float_array(X_val)), np.asarray(y_val),
+                mlp_alone,
+                X_tr_sc,
+                np.asarray(y_train),
+                scaler.transform(_to_float_array(X_val)),
+                np.asarray(y_val),
             )
         else:
             mlp_alone = _StubMLP(seed=seed)
@@ -445,27 +458,25 @@ def run_ablation(
         hyb_m = h_result["hybrid_test_metrics"]
 
         for name, m in [
-            ("xgboost_alone",   xgb_m),
-            ("mlp_alone",       mlp_m),
-            ("plain_average",   avg_m),
+            ("xgboost_alone", xgb_m),
+            ("mlp_alone", mlp_m),
+            ("plain_average", avg_m),
             ("residual_hybrid", hyb_m),
         ]:
-            rows.append({
-                "condition": name,
-                "seed": seed,
-                "regime": regime,
-                "partial_scenario": partial_scenario,
-                **{k: round(v, 6) for k, v in m.items()},
-            })
+            rows.append(
+                {
+                    "condition": name,
+                    "seed": seed,
+                    "regime": regime,
+                    "partial_scenario": partial_scenario,
+                    **{k: round(v, 6) for k, v in m.items()},
+                }
+            )
 
     df = pd.DataFrame(rows)
 
     # Aggregate: mean ± std across seeds for each condition.
-    agg = (
-        df.groupby("condition")[["mae", "rmse", "r2"]]
-        .agg(["mean", "std"])
-        .round(4)
-    )
+    agg = df.groupby("condition")[["mae", "rmse", "r2"]].agg(["mean", "std"]).round(4)
     agg.columns = [f"{m}_{s}" for m, s in agg.columns]
     agg = agg.reset_index()
 
@@ -521,9 +532,9 @@ def _save_results(result: dict, path: Path) -> None:
         "n_features": cfg["n_features"],
         "mlp_backend": cfg["mlp_backend"],
         "timing_s": result["timing_seconds"],
-        **{f"xgb_test_{k}":    v for k, v in result["xgb_test_metrics"].items()},
+        **{f"xgb_test_{k}": v for k, v in result["xgb_test_metrics"].items()},
         **{f"hybrid_test_{k}": v for k, v in result["hybrid_test_metrics"].items()},
-        **{f"hybrid_val_{k}":  v for k, v in result["hybrid_val_metrics"].items()},
+        **{f"hybrid_val_{k}": v for k, v in result["hybrid_val_metrics"].items()},
     }
     write_header = not path.exists()
     with open(path, "a", newline="") as fh:
@@ -544,11 +555,16 @@ def _parse_args():
     p.add_argument("--regime", type=int, default=1, choices=[1, 2])
     p.add_argument("--partial-scenario", default="8/8")
     p.add_argument("--folds", type=int, default=5)
-    p.add_argument("--seeds", type=int, default=5,
-                   help="Number of seeds from AGREED_SEEDS [42, 123, 456, 789, 1011]")
+    p.add_argument(
+        "--seeds",
+        type=int,
+        default=5,
+        help="Number of seeds from AGREED_SEEDS [42, 123, 456, 789, 1011]",
+    )
     p.add_argument("--subsample", type=int, default=None)
-    p.add_argument("--ablation", action="store_true",
-                   help="Run the full 4-condition ablation table")
+    p.add_argument(
+        "--ablation", action="store_true", help="Run the full 4-condition ablation table"
+    )
     p.add_argument("--no-report", action="store_true")
     return p.parse_args()
 
