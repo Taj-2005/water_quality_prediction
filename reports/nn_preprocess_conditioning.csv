@@ -1,0 +1,5 @@
+strategy,pct_beyond_5sd,pct_beyond_10sd,max_abs_value,mean_abs_skew
+phase1,0.7304,0.2208,48.04,6.328
+robust,4.9781,3.0517,740.54,6.328
+yeo-johnson,0.1572,0.013,44.88,1.358
+quantile,0.0274,0.0,5.2,0.13
