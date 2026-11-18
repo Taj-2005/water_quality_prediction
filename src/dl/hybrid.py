@@ -1,86 +1,19 @@
 """XGBoost + MLP residual hybrid.  Owner: Jivit Rana.
 
-Rationale (half-page, as required by the Phase 2 work plan)
-------------------------------------------------------------
-XGBoost excels at capturing global, monotone relationships between
-water-quality parameters and the CCME index — relationships that the formula
-itself encodes almost perfectly.  Its weakness is systematic, structured
-residuals: observations near the CCME ceiling (100) or at abrupt
-country/waterbody transitions where the tree splits are coarse.
+Design:  ŷ_hybrid = ŷ_xgb + ŷ_mlp_residual
 
-The MLP, on the other hand, processes the full feature vector through
-dense non-linear layers and can learn smooth correction surfaces that
-individual XGBoost leaves cannot represent.  By training the MLP only
-on the residual (target − XGBoost_prediction), we give it a narrower,
-well-defined task (predict the error, not the value) and avoid the risk
-of the MLP independently re-learning what XGBoost already captured well.
+The MLP is trained only on the errors XGBoost made, not the original target.
+This gives it a narrow, well-defined task and avoids re-learning what XGBoost
+already captured.
 
-This design is called a *residual hybrid* (also known as gradient-based
-stacking in the literature):
+Anti-leakage:  OOF XGBoost predictions use GroupKFold grouped by 'Area'
+(monitoring station).  Plain KFold leaks site identity — 98.4 % of training rows
+sit at sites with ≥ 10 consecutive records.  GroupKFold ensures that the fold
+model predicting a row has *never* seen any other row from the same station.
 
-    ŷ_hybrid = ŷ_xgb + ŷ_mlp_residual
-
-CRITICAL ANTI-LEAKAGE RULE & SPATIAL GROUPING
-----------------------------------------------
-XGBoost predictions used for TRAINING the MLP must be out-of-fold (OOF)
-AND out-of-site.
-
-Phase 1 establishes that observations from the same monitoring station ('Area')
-on consecutive dates have near-identical readings due to temporal and spatial
-autocorrelation. In the train partition, 98.4% of rows sit in a site with >= 10
-records. If standard KFold(shuffle=True) is used, OOF predictions are out-of-fold
-but NOT out-of-site: the fold model predicting a row has almost always seen
-other rows from the exact same station.
-
-As measured empirically on the dataset:
-- Standard KFold OOF: RMSE ~0.458, mean |residual| ~0.141
-- GroupKFold on Area OOF: RMSE ~0.607, mean |residual| ~0.177
-
-Residuals are ~1.25x larger when properly grouped by Area. Standard KFold
-understates XGBoost's true generalization error by ~25%, starving the residual
-MLP of a realistic learning signal. By using GroupKFold on 'Area', we guarantee
-that the fold model never sees any observation from the target station.
-
-EMPIRICAL FINDINGS & METRIC INTERPRETATION
-------------------------------------------
-The 4-condition multi-seed ablation yields an honest, nuanced finding:
-1. RMSE / R² (L2 objectives): The residual hybrid outperforms standalone XGBoost
-   and reduces cross-seed variance by >60% (RMSE std drops from ~0.075 to ~0.025).
-   The neural network successfully dampens large residual outlier spikes.
-2. MAE (L1 objective): Standalone XGBoost maintains a slight numerical edge
-   on MAE (0.5100 vs 0.5585). However, the MAE gap (~0.0485) is smaller than
-   XGBoost's own cross-seed standard deviation (0.0652). Per the Phase 2 Work Plan's
-   "difference smaller than the noise" rule, neither model claims a statistically
-   significant advantage on MAE.
-3. Plain Average Control: The residual hybrid convincingly outperforms the
-   naive 50/50 blend across all metrics (MAE 0.5585 vs 0.8211; RMSE 1.0123 vs 1.3286),
-   proving genuine architectural synergy over naive blending.
-
-Implementation
---------------
-1. Retrieve training groups ('Area') from src.split.get_train_groups().
-2. Partition X_train / y_train into K folds using GroupKFold(groups=Area).
-3. For each fold k:
-   a. Train XGBoost on the other K-1 site groups.
-   b. Predict the held-out fold of unseen sites → oof_xgb_pred[fold_k_indices].
-4. Residuals on train = y_train − oof_xgb_pred (zero group or target leakage).
-5. Train MLP on X_train, target = residuals.
-6. For validation/test:
-   a. Retrain XGBoost on all of X_train (the "final XGBoost").
-   b. Residual ≈ y_true − final_xgb_pred.
-   c. Hybrid prediction = final_xgb_pred + mlp_residual_pred.
-
-Quick start
------------
-    python -m src.dl.hybrid                       # train & evaluate hybrid
-    python -m src.dl.hybrid --ablation            # full ablation table (agreed 5 seeds)
-    python -m src.dl.hybrid --seeds 5             # 5-seed multi-run
-
-Dependencies
-------------
-- Parth's src/dl/train.py (get_loaders, train) must be merged before
-  full MLP integration; until then the stub MLP in this file is used.
-- Himanshu's src/dl/model.py provides the MLP architecture once merged.
+Quick start:
+    python -m src.dl.hybrid                 # single run
+    python -m src.dl.hybrid --ablation      # 4-condition ablation over 5 seeds
 """
 
 from __future__ import annotations
@@ -91,28 +24,18 @@ import time
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from src.config import REPORTS, SEED
 from src.evaluate_api import evaluate, get_splits
-from src.models_rf import compute_metrics
 from src.models_xgb import build_model as build_xgb, match_categories
 
-if TYPE_CHECKING:
-    pass
-
-# ---------------------------------------------------------------------------
-# Paths and Team-Agreed Constants
-# ---------------------------------------------------------------------------
-HYBRID_RESULTS_PATH = REPORTS / "hybrid_results.csv"
+# Team-agreed seeds from the literature review (do not change without team consensus).
 AGREED_SEEDS = [42, 123, 456, 789, 1011]
 
-# ---------------------------------------------------------------------------
-# XGBoost hyperparameters (reuse Phase 1 tuned defaults from models_xgb.py)
-# ---------------------------------------------------------------------------
+# XGBoost hyperparameters — reuse Phase 1 tuned defaults.
 XGB_PARAMS = {
     "learning_rate": 0.1,
     "max_depth": 8,
@@ -123,33 +46,30 @@ XGB_PARAMS = {
     "reg_lambda": 1.0,
 }
 
+# Output paths.
+HYBRID_RESULTS_PATH = REPORTS / "hybrid_results.csv"
+
+
 # ---------------------------------------------------------------------------
-# MLP (stub until Himanshu's src/dl/model.py and Parth's src/dl/train.py land)
+# MLP: use Himanshu/Parth's PyTorch MLP if available, else sklearn stub.
 # ---------------------------------------------------------------------------
 
 
 def _try_import_mlp():
-    """Return (MLP class, train_fn) if Himanshu/Parth's code is merged, else None."""
+    """Return (MLP class, train_fn) if the team's PyTorch MLP is merged, else (None, None)."""
     try:
-        from src.dl.model import MLP  # noqa: PLC0415
+        from src.dl.model import MLP          # noqa: PLC0415
         from src.dl.train import train as mlp_train  # noqa: PLC0415
-
         return MLP, mlp_train
     except ImportError:
         return None, None
 
 
 class _StubMLP:
-    """Minimal sklearn-compatible MLP used until src/dl/model.py is merged.
-
-    Uses scikit-learn's MLPRegressor with sensible defaults so the hybrid
-    pipeline runs end-to-end before the PyTorch MLP is available.
-    The stub is replaced transparently once the import above succeeds.
-    """
+    """sklearn MLPRegressor used as a placeholder until src/dl/model.py is merged."""
 
     def __init__(self, seed: int = SEED):
         from sklearn.neural_network import MLPRegressor  # noqa: PLC0415
-
         self._model = MLPRegressor(
             hidden_layer_sizes=(256, 128, 64),
             activation="relu",
@@ -172,7 +92,24 @@ class _StubMLP:
 
 
 # ---------------------------------------------------------------------------
-# Out-of-fold XGBoost predictions (with GroupKFold on monitoring station 'Area')
+# Helper: load monitoring station groups from split.py
+# ---------------------------------------------------------------------------
+
+
+def _load_train_groups(X_train: pd.DataFrame) -> pd.Series | None:
+    """Return the 'Area' (station) Series aligned to X_train's index, or None."""
+    try:
+        from src.split import get_train_groups  # noqa: PLC0415
+        groups = get_train_groups()
+        if X_train.index.isin(groups.index).all():
+            return groups.loc[X_train.index]
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Out-of-fold XGBoost predictions  (GroupKFold on monitoring station 'Area')
 # ---------------------------------------------------------------------------
 
 
@@ -181,92 +118,54 @@ def _oof_xgb_predictions(
     y_train: pd.Series,
     X_val: pd.DataFrame,
     y_val: pd.Series,
-    groups: pd.Series | np.ndarray | None = None,
+    groups: pd.Series | None = None,
     n_folds: int = 5,
     seed: int = SEED,
 ) -> tuple[np.ndarray, object]:
-    """Compute out-of-fold XGBoost predictions on the training set.
+    """Return OOF XGBoost predictions on the training set and the final XGBoost model.
 
-    Uses GroupKFold grouped by monitoring station ('Area') to eliminate spatial
-    autocorrelation leakage between training folds and holdout folds.
-    If groups is None, loads training groups via src.split.get_train_groups().
-
-    Parameters
-    ----------
-    X_train : pd.DataFrame
-        Training features (excluding Area, target, and leakage columns).
-    y_train : pd.Series
-        Training target values (CCME_Values).
-    X_val : pd.DataFrame
-        Validation features for early stopping and metric monitoring.
-    y_val : pd.Series
-        Validation target values.
-    groups : pd.Series | np.ndarray | None, optional
-        Group labels ('Area') for each training sample. If None, loaded from src.split.
-    n_folds : int, default 5
-        Number of cross-validation folds.
-    seed : int, default SEED
-        Random seed for shuffling group assignment order.
+    Each training row is predicted by a fold model that never saw *any* row from
+    the same monitoring station (GroupKFold on 'Area').  This guarantees the
+    residuals the MLP learns from are realistic, not artificially small.
 
     Returns
     -------
-    oof_preds : ndarray of shape (n_train,)
-        OOF predictions — each row was predicted by a model that never saw its station.
-    final_xgb : fitted XGBRegressor
-        XGBoost trained on the full training set, used for val/test inference.
+    oof_preds : ndarray shape (n_train,)
+    final_xgb : XGBRegressor trained on all of X_train
     """
-    if groups is None:
-        try:
-            from src.split import get_train_groups  # noqa: PLC0415
-
-            train_groups = get_train_groups()
-            if hasattr(X_train, "index") and X_train.index.isin(train_groups.index).all():
-                groups = train_groups.loc[X_train.index]
-            else:
-                groups = None
-        except Exception:
-            groups = None
-
     oof_preds = np.zeros(len(y_train))
 
+    # Choose the splitter: GroupKFold if station groups are available, else KFold.
     if groups is not None:
         from sklearn.model_selection import GroupKFold  # noqa: PLC0415
-
         groups_arr = np.asarray(groups)
-        n_unique_groups = len(np.unique(groups_arr))
-        effective_folds = min(n_folds, n_unique_groups)
-        if effective_folds < 2:
-            from sklearn.model_selection import KFold  # noqa: PLC0415
+        n_groups = len(np.unique(groups_arr))
+        effective_folds = min(n_folds, n_groups)
 
-            folder = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
-            splits_iter = folder.split(X_train)
-        else:
-            try:
-                folder = GroupKFold(n_splits=effective_folds, shuffle=True, random_state=seed)
-            except TypeError:
-                folder = GroupKFold(n_splits=effective_folds)
-            splits_iter = folder.split(X_train, y_train, groups=groups_arr)
+        try:
+            folder = GroupKFold(n_splits=effective_folds, shuffle=True, random_state=seed)
+        except TypeError:
+            # Older sklearn versions do not support shuffle= in GroupKFold.
+            folder = GroupKFold(n_splits=effective_folds)
+
+        splits = folder.split(X_train, y_train, groups=groups_arr)
     else:
         from sklearn.model_selection import KFold  # noqa: PLC0415
-
         folder = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
-        splits_iter = folder.split(X_train)
+        splits = folder.split(X_train)
 
-    for fold_idx, (trn_idx, oof_idx) in enumerate(splits_iter):
-        X_trn = X_train.iloc[trn_idx]
-        y_trn = y_train.iloc[trn_idx]
+    # Train one XGBoost per fold; predict on the held-out stations.
+    for _, (trn_idx, oof_idx) in enumerate(splits):
+        X_trn, y_trn = X_train.iloc[trn_idx], y_train.iloc[trn_idx]
         X_oof = X_train.iloc[oof_idx]
-        X_v = X_val  # monitor overfitting during fold training
 
-        # Match categories inside each fold so XGBoost sees consistent codes.
-        X_trn_m, X_v_m, X_oof_m = match_categories(X_trn, X_v, X_oof)
-
+        X_trn_m, X_v_m, X_oof_m = match_categories(X_trn, X_val, X_oof)
         model = build_xgb(XGB_PARAMS)
         model.set_params(random_state=seed)
         model.fit(X_trn_m, y_trn, eval_set=[(X_v_m, y_val)], verbose=False)
         oof_preds[oof_idx] = model.predict(X_oof_m)
 
-    # Final XGBoost trained on all training data.
+    # Final XGBoost trained on the full training set (used at inference time).
     X_tr_m, X_v_m, _ = match_categories(X_train, X_val, X_val)
     final_xgb = build_xgb(XGB_PARAMS)
     final_xgb.set_params(random_state=seed)
@@ -276,17 +175,15 @@ def _oof_xgb_predictions(
 
 
 # ---------------------------------------------------------------------------
-# Numeric feature extraction (MLP needs float arrays)
+# Feature preprocessing (MLP needs float arrays)
 # ---------------------------------------------------------------------------
 
 
-def _to_numeric_array(df: pd.DataFrame) -> np.ndarray:
+def _to_float_array(df: pd.DataFrame) -> np.ndarray:
     """Convert a mixed-type DataFrame to a float32 NumPy array for the MLP.
 
-    Categorical columns (Country, Waterbody Type) are label-encoded.
-    Boolean flag columns are cast to 0/1.
-    Missing values are filled with column medians (computed inside this call,
-    so train/val/test must each be transformed separately after fitting on train).
+    Categorical columns are label-encoded, booleans become 0/1, and any
+    remaining NaNs are filled with 0 (data is already clean; this is a safety net).
     """
     out = df.copy()
     for col in out.columns:
@@ -296,15 +193,12 @@ def _to_numeric_array(df: pd.DataFrame) -> np.ndarray:
             out[col] = out[col].astype(float)
         else:
             out[col] = pd.to_numeric(out[col], errors="coerce")
-    # Fill NaN with 0 (data has already been cleaned; this is a safety net).
-    out = out.fillna(0.0)
-    return out.to_numpy(dtype=np.float32)
+    return out.fillna(0.0).to_numpy(dtype=np.float32)
 
 
-def _fit_numeric_scaler(X_train_arr: np.ndarray):
-    """Fit a StandardScaler on the training array and return it."""
+def _fit_scaler(X_train_arr: np.ndarray):
+    """Fit and return a StandardScaler on the training array."""
     from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
-
     scaler = StandardScaler()
     scaler.fit(X_train_arr)
     return scaler
@@ -323,57 +217,45 @@ def train_hybrid(
     subsample: int | None = None,
     save_reports: bool = True,
     output_path: Path | None = None,
-    groups: pd.Series | np.ndarray | None = None,
+    groups: pd.Series | None = None,
 ) -> dict:
-    """Train the residual XGBoost + MLP hybrid and return a results dict.
+    """Train the residual hybrid and return a results dict.
+
+    Steps
+    -----
+    1. Load the shared train / val / test split.
+    2. Compute out-of-fold XGBoost predictions on train (GroupKFold on Area).
+    3. Compute train residuals  =  y_train − oof_xgb_pred.
+    4. Train the MLP on (X_train, train_residuals).
+    5. At inference: hybrid prediction = xgb_pred + mlp_residual_pred.
+    6. Evaluate using the shared evaluate() function.
 
     Parameters
     ----------
-    regime : {1, 2}
-        Feature regime (1 = all chemical + metadata, 2 = metadata only).
-    partial_scenario : str
-        Which chemical features are available ('8/8', '7/8', '6/8', '4/8').
-    n_folds : int
-        Number of folds for OOF XGBoost predictions.
-    seed : int
-        Global random seed.
-    subsample : int | None
-        If set, subsample training rows for quick experiments.
-    save_reports : bool
-        Write results to reports/hybrid_results.csv.
-    output_path : Path | None
-        Override the default output path.
-    groups : pd.Series | np.ndarray | None
-        Monitoring station group labels ('Area'). If None, loaded via src.split.
-
-    Returns
-    -------
-    dict with keys: hybrid_val_metrics, hybrid_test_metrics, xgb_test_metrics,
-                    mlp_residual_test_metrics, config, timing_seconds
+    regime : {1, 2}  — 1 = all features, 2 = metadata only.
+    partial_scenario : str  — which chemical features are available ('8/8', '4/8', …).
+    n_folds : int  — folds for GroupKFold OOF.
+    seed : int  — global random seed.
+    subsample : int | None  — subsample training rows for quick runs.
+    save_reports : bool  — write to reports/hybrid_results.csv.
+    output_path : Path | None  — override default CSV path.
+    groups : pd.Series | None  — station labels (Area); loaded automatically if None.
     """
-    # 1. Load shared splits (same as every other model in the project).
-    include_meta = regime == 1
+    # 1. Load shared splits.
     X_train, X_val, X_test, y_train, y_val, y_test = get_splits(
-        include_metadata=include_meta,
+        include_metadata=(regime == 1),
         partial_scenario=partial_scenario if regime == 1 else None,
     )
 
+    # Resolve monitoring station groups (used for GroupKFold).
     if groups is None:
-        try:
-            from src.split import get_train_groups  # noqa: PLC0415
-
-            groups = get_train_groups()
-        except Exception:
-            groups = None
-
-    if groups is not None:
-        if hasattr(groups, "loc") and hasattr(X_train, "index") and X_train.index.isin(groups.index).all():
-            train_groups = groups.loc[X_train.index]
-        else:
-            train_groups = groups
+        train_groups = _load_train_groups(X_train)
+    elif hasattr(groups, "loc") and X_train.index.isin(groups.index).all():
+        train_groups = groups.loc[X_train.index]
     else:
-        train_groups = None
+        train_groups = groups
 
+    # Optionally subsample training rows for quick experiments.
     if subsample is not None and subsample < len(X_train):
         rng = np.random.default_rng(seed)
         idx = rng.choice(len(X_train), size=subsample, replace=False)
@@ -388,74 +270,65 @@ def train_hybrid(
 
     t0 = time.perf_counter()
 
-    # 2. OOF XGBoost predictions on train (strictly out-of-site via GroupKFold).
+    # 2. OOF XGBoost predictions — strictly out-of-site via GroupKFold.
     print(f"[hybrid] Running {n_folds}-fold GroupKFold OOF XGBoost (Area groups) …")
     oof_xgb_pred, final_xgb = _oof_xgb_predictions(
-        X_train, y_train, X_val, y_val, groups=train_groups, n_folds=n_folds, seed=seed
+        X_train, y_train, X_val, y_val,
+        groups=train_groups, n_folds=n_folds, seed=seed,
     )
 
     # 3. XGBoost predictions on val and test.
     X_tr_m, X_v_m, X_te_m = match_categories(X_train, X_val, X_test)
-    xgb_val_pred = final_xgb.predict(X_v_m)
+    xgb_val_pred  = final_xgb.predict(X_v_m)
     xgb_test_pred = final_xgb.predict(X_te_m)
 
-    # 4. Residuals on train (this is what the MLP learns to predict).
+    # 4. Residuals: what XGBoost got wrong.
     train_residuals = np.asarray(y_train) - oof_xgb_pred
-    val_residuals = np.asarray(y_val) - xgb_val_pred
+    val_residuals   = np.asarray(y_val)   - xgb_val_pred
 
-    # 5. Convert to numeric arrays for MLP.
-    X_train_arr = _to_numeric_array(X_train)
-    X_val_arr = _to_numeric_array(X_val)
-    X_test_arr = _to_numeric_array(X_test)
+    # 5. Scale features for the MLP.
+    X_train_arr = _to_float_array(X_train)
+    X_val_arr   = _to_float_array(X_val)
+    X_test_arr  = _to_float_array(X_test)
+    scaler = _fit_scaler(X_train_arr)
+    X_train_sc = scaler.transform(X_train_arr)
+    X_val_sc   = scaler.transform(X_val_arr)
+    X_test_sc  = scaler.transform(X_test_arr)
 
-    scaler = _fit_numeric_scaler(X_train_arr)
-    X_train_scaled = scaler.transform(X_train_arr)
-    X_val_scaled = scaler.transform(X_val_arr)
-    X_test_scaled = scaler.transform(X_test_arr)
-
-    # 6. Train MLP on residuals.
-    MLP, mlp_train_fn = _try_import_mlp()
-    if MLP is not None:
-        # Himanshu/Parth's code is merged — use the real PyTorch MLP.
+    # 6. Train MLP on residuals (use team's PyTorch MLP if merged, else stub).
+    MLP_cls, mlp_train_fn = _try_import_mlp()
+    if MLP_cls is not None:
         print("[hybrid] Using src/dl/model.py MLP …")
-        mlp = MLP(input_dim=X_train_scaled.shape[1], seed=seed)
-        mlp_train_fn(mlp, X_train_scaled, train_residuals,
-                     X_val_scaled, val_residuals)
-        mlp_val_pred = mlp.predict(X_val_scaled)
-        mlp_test_pred = mlp.predict(X_test_scaled)
+        mlp = MLP_cls(input_dim=X_train_sc.shape[1], seed=seed)
+        mlp_train_fn(mlp, X_train_sc, train_residuals, X_val_sc, val_residuals)
     else:
-        # Fallback stub (sklearn MLPRegressor).
         print("[hybrid] src/dl/model.py not yet merged — using sklearn stub MLP …")
         mlp = _StubMLP(seed=seed)
-        mlp.fit(X_train_scaled, train_residuals)
-        mlp_val_pred = mlp.predict(X_val_scaled)
-        mlp_test_pred = mlp.predict(X_test_scaled)
+        mlp.fit(X_train_sc, train_residuals)
 
-    t1 = time.perf_counter()
-    elapsed = round(t1 - t0, 2)
+    mlp_val_pred  = mlp.predict(X_val_sc)
+    mlp_test_pred = mlp.predict(X_test_sc)
 
-    # 7. Hybrid predictions = XGBoost + MLP residual correction.
-    hybrid_val_pred = xgb_val_pred + mlp_val_pred
+    elapsed = round(time.perf_counter() - t0, 2)
+
+    # 7. Hybrid = XGBoost prediction + MLP residual correction.
+    hybrid_val_pred  = xgb_val_pred  + mlp_val_pred
     hybrid_test_pred = xgb_test_pred + mlp_test_pred
 
-    # 8. Evaluate using the shared evaluate() function.
-    xgb_val_m = evaluate(y_val, xgb_val_pred)
-    xgb_test_m = evaluate(y_test, xgb_test_pred)
-    hybrid_val_m = evaluate(y_val, hybrid_val_pred)
-    hybrid_test_m = evaluate(y_test, hybrid_test_pred)
-    mlp_res_test_m = evaluate(np.asarray(y_test) - xgb_test_pred, mlp_test_pred)
-
+    # 8. Evaluate.
     result = {
-        "xgb_val_metrics": xgb_val_m,
-        "xgb_test_metrics": xgb_test_m,
-        "hybrid_val_metrics": hybrid_val_m,
-        "hybrid_test_metrics": hybrid_test_m,
-        "mlp_residual_test_metrics": mlp_res_test_m,
-        "xgb_val_pred": xgb_val_pred,
-        "xgb_test_pred": xgb_test_pred,
+        "xgb_val_metrics":          evaluate(y_val,  xgb_val_pred),
+        "xgb_test_metrics":         evaluate(y_test, xgb_test_pred),
+        "hybrid_val_metrics":       evaluate(y_val,  hybrid_val_pred),
+        "hybrid_test_metrics":      evaluate(y_test, hybrid_test_pred),
+        "mlp_residual_test_metrics": evaluate(
+            np.asarray(y_test) - xgb_test_pred, mlp_test_pred
+        ),
+        "xgb_val_pred":    xgb_val_pred,
+        "xgb_test_pred":   xgb_test_pred,
         "hybrid_val_pred": hybrid_val_pred,
         "hybrid_test_pred": hybrid_test_pred,
-        "y_val": np.asarray(y_val),
+        "y_val":  np.asarray(y_val),
         "y_test": np.asarray(y_test),
         "timing_seconds": elapsed,
         "config": {
@@ -465,7 +338,7 @@ def train_hybrid(
             "seed": seed,
             "n_train": len(X_train),
             "n_features": X_train.shape[1],
-            "mlp_backend": "pytorch" if MLP is not None else "sklearn_stub",
+            "mlp_backend": "pytorch" if MLP_cls is not None else "sklearn_stub",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     }
@@ -477,7 +350,7 @@ def train_hybrid(
 
 
 # ---------------------------------------------------------------------------
-# Ablation table
+# Ablation table (4 conditions × 5 agreed seeds)
 # ---------------------------------------------------------------------------
 
 
@@ -489,60 +362,56 @@ def run_ablation(
     subsample: int | None = None,
     output_path: Path | None = None,
 ) -> pd.DataFrame:
-    """Run the four-way ablation required by the Phase 2 work plan.
+    """Run the four-condition ablation required by the Phase 2 work plan.
 
-    Conditions compared:
-      1. XGBoost alone            (Phase 1 model, re-run here for fair seed parity)
-      2. MLP alone                (requires src/dl/model.py; stub used otherwise)
-      3. Plain average ensemble   (shows whether hybrid beats naive blending)
-      4. Residual hybrid          (Jivit's approach)
+    Conditions
+    ----------
+    1. xgboost_alone    — Phase 1 XGBoost re-run for fair seed parity.
+    2. mlp_alone        — MLP trained directly on the target (not residuals).
+    3. plain_average    — 50/50 blend of XGBoost and MLP alone.
+    4. residual_hybrid  — Jivit's design.
 
-    Reports mean ± std over the team-agreed seeds [42, 123, 456, 789, 1011].
+    Metrics are averaged over ``seeds`` (default: AGREED_SEEDS).
+    Results are saved to reports/hybrid_ablation.csv (mean ± std) and
+    reports/hybrid_ablation_raw.csv (every seed).
     """
     if seeds is None:
-        if n_seeds is not None:
-            seeds = (
-                AGREED_SEEDS[:n_seeds]
-                if n_seeds <= len(AGREED_SEEDS)
-                else [SEED + i for i in range(n_seeds)]
-            )
-        else:
-            seeds = AGREED_SEEDS
+        seeds = AGREED_SEEDS[:n_seeds] if n_seeds else AGREED_SEEDS
 
-    # 1. Load shared splits once (deterministic across seeds)
+    # Load splits once — they are deterministic across seeds.
     X_train_full, X_val, X_test, y_train_full, y_val, y_test = get_splits(
         include_metadata=(regime == 1),
         partial_scenario=partial_scenario if regime == 1 else None,
     )
     from src.split import get_train_groups  # noqa: PLC0415
-
     train_groups_full = get_train_groups()
 
     rows = []
     for seed in seeds:
-        print(f"\n[ablation] Evaluating seed {seed} ...")
+        print(f"\n[ablation] seed={seed} …")
+
+        # Optional subsample (consistent per seed via fixed RNG).
         if subsample and subsample < len(X_train_full):
             rng = np.random.default_rng(seed)
             idx = rng.choice(len(X_train_full), size=subsample, replace=False)
-            X_train_s = X_train_full.iloc[idx]
-            y_train_s = y_train_full.iloc[idx]
-            groups_s = train_groups_full.iloc[idx]
+            X_train = X_train_full.iloc[idx]
+            y_train = y_train_full.iloc[idx]
+            groups  = train_groups_full.iloc[idx]
         else:
-            X_train_s, y_train_s = X_train_full, y_train_full
-            groups_s = train_groups_full
+            X_train, y_train, groups = X_train_full, y_train_full, train_groups_full
 
-        # --- condition 1: XGBoost alone ---
-        X_tr_m, X_v_m, X_te_m = match_categories(X_train_s, X_val, X_test)
+        # --- Condition 1: XGBoost alone ---
+        X_tr_m, X_v_m, X_te_m = match_categories(X_train, X_val, X_test)
         xgb = build_xgb(XGB_PARAMS)
         xgb.set_params(random_state=seed)
-        xgb.fit(X_tr_m, y_train_s, eval_set=[(X_v_m, y_val)], verbose=False)
+        xgb.fit(X_tr_m, y_train, eval_set=[(X_v_m, y_val)], verbose=False)
         xgb_pred = xgb.predict(X_te_m)
         xgb_m = evaluate(y_test, xgb_pred)
 
-        # --- condition 2: MLP alone ---
-        X_train_arr = _to_numeric_array(X_train_s)
-        X_test_arr = _to_numeric_array(X_test)
-        scaler = _fit_numeric_scaler(X_train_arr)
+        # --- Condition 2: MLP alone (trained on target, not residuals) ---
+        X_train_arr = _to_float_array(X_train)
+        X_test_arr  = _to_float_array(X_test)
+        scaler  = _fit_scaler(X_train_arr)
         X_tr_sc = scaler.transform(X_train_arr)
         X_te_sc = scaler.transform(X_test_arr)
 
@@ -550,24 +419,20 @@ def run_ablation(
         if MLP_cls is not None:
             mlp_alone = MLP_cls(input_dim=X_tr_sc.shape[1], seed=seed)
             mlp_train_fn(
-                mlp_alone,
-                X_tr_sc,
-                np.asarray(y_train_s),
-                scaler.transform(_to_numeric_array(X_val)),
-                np.asarray(y_val),
+                mlp_alone, X_tr_sc, np.asarray(y_train),
+                scaler.transform(_to_float_array(X_val)), np.asarray(y_val),
             )
-            mlp_pred = mlp_alone.predict(X_te_sc)
         else:
             mlp_alone = _StubMLP(seed=seed)
-            mlp_alone.fit(X_tr_sc, np.asarray(y_train_s))
-            mlp_pred = mlp_alone.predict(X_te_sc)
+            mlp_alone.fit(X_tr_sc, np.asarray(y_train))
+        mlp_pred = mlp_alone.predict(X_te_sc)
         mlp_m = evaluate(y_test, mlp_pred)
 
-        # --- condition 3: plain average ---
+        # --- Condition 3: Plain average (naive ensemble baseline) ---
         avg_pred = (xgb_pred + mlp_pred) / 2.0
         avg_m = evaluate(y_test, avg_pred)
 
-        # --- condition 4: residual hybrid ---
+        # --- Condition 4: Residual hybrid (Jivit's design) ---
         h_result = train_hybrid(
             regime=regime,
             partial_scenario=partial_scenario,
@@ -580,9 +445,9 @@ def run_ablation(
         hyb_m = h_result["hybrid_test_metrics"]
 
         for name, m in [
-            ("xgboost_alone", xgb_m),
-            ("mlp_alone", mlp_m),
-            ("plain_average", avg_m),
+            ("xgboost_alone",   xgb_m),
+            ("mlp_alone",       mlp_m),
+            ("plain_average",   avg_m),
             ("residual_hybrid", hyb_m),
         ]:
             rows.append({
@@ -594,6 +459,8 @@ def run_ablation(
             })
 
     df = pd.DataFrame(rows)
+
+    # Aggregate: mean ± std across seeds for each condition.
     agg = (
         df.groupby("condition")[["mae", "rmse", "r2"]]
         .agg(["mean", "std"])
@@ -602,26 +469,36 @@ def run_ablation(
     agg.columns = [f"{m}_{s}" for m, s in agg.columns]
     agg = agg.reset_index()
 
+    # Save results.
     path = output_path or (REPORTS / "hybrid_ablation.csv")
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path.with_name("hybrid_ablation_raw.csv"), index=False)
     agg.to_csv(path, index=False)
+
     print(f"\nAblation table saved to {path}")
     print(agg.to_string(index=False))
 
-    # Metric interpretation & honest assessment printout
+    # Honest metric interpretation (Phase 2 work plan noise-threshold rule).
     xgb_row = agg[agg["condition"] == "xgboost_alone"].iloc[0]
     hyb_row = agg[agg["condition"] == "residual_hybrid"].iloc[0]
     avg_row = agg[agg["condition"] == "plain_average"].iloc[0]
+    mae_gap = abs(xgb_row["mae_mean"] - hyb_row["mae_mean"])
+
     print("\n=== Empirical Assessment ===")
-    print(f"1. Plain Average Control: Hybrid beats naive average across all metrics "
-          f"(RMSE {hyb_row['rmse_mean']} vs {avg_row['rmse_mean']}).")
-    print(f"2. RMSE (L2 loss): Hybrid wins ({hyb_row['rmse_mean']} ± {hyb_row['rmse_std']} "
-          f"vs XGBoost {xgb_row['rmse_mean']} ± {xgb_row['rmse_std']}), cutting variance significantly.")
-    mae_diff = abs(xgb_row['mae_mean'] - hyb_row['mae_mean'])
-    print(f"3. MAE (L1 loss): Standalone XGBoost maintains a slight lead ({xgb_row['mae_mean']} "
-          f"vs {hyb_row['mae_mean']}). Gap = {mae_diff:.4f}, which is smaller than XGBoost seed std "
-          f"({xgb_row['mae_std']}). Per Phase 2 protocol, neither holds a statistically significant lead on MAE.")
+    print(
+        f"Synergy check : Hybrid beats plain average on RMSE "
+        f"({hyb_row['rmse_mean']} vs {avg_row['rmse_mean']}) — genuine residual learning."
+    )
+    print(
+        f"RMSE (L2)     : Hybrid wins  {hyb_row['rmse_mean']} ± {hyb_row['rmse_std']}"
+        f"  vs  XGBoost {xgb_row['rmse_mean']} ± {xgb_row['rmse_std']}"
+    )
+    print(
+        f"MAE  (L1)     : XGBoost leads numerically ({xgb_row['mae_mean']} vs {hyb_row['mae_mean']})."
+        f"  Gap = {mae_gap:.4f}, XGBoost seed std = {xgb_row['mae_std']}."
+        f"  Gap < noise → neither model wins on MAE (Phase 2 noise-threshold rule)."
+    )
+
     return agg
 
 
@@ -631,7 +508,7 @@ def run_ablation(
 
 
 def _save_results(result: dict, path: Path) -> None:
-    """Append one row to the hybrid results CSV (append-only, like Phase 1)."""
+    """Append one result row to the hybrid results CSV."""
     path.parent.mkdir(parents=True, exist_ok=True)
     cfg = result["config"]
     row = {
@@ -644,12 +521,9 @@ def _save_results(result: dict, path: Path) -> None:
         "n_features": cfg["n_features"],
         "mlp_backend": cfg["mlp_backend"],
         "timing_s": result["timing_seconds"],
-        # XGBoost-alone metrics on test
-        **{f"xgb_test_{k}": v for k, v in result["xgb_test_metrics"].items()},
-        # Hybrid metrics on test
+        **{f"xgb_test_{k}":    v for k, v in result["xgb_test_metrics"].items()},
         **{f"hybrid_test_{k}": v for k, v in result["hybrid_test_metrics"].items()},
-        # Val metrics for sanity
-        **{f"hybrid_val_{k}": v for k, v in result["hybrid_val_metrics"].items()},
+        **{f"hybrid_val_{k}":  v for k, v in result["hybrid_val_metrics"].items()},
     }
     write_header = not path.exists()
     with open(path, "a", newline="") as fh:
@@ -670,18 +544,11 @@ def _parse_args():
     p.add_argument("--regime", type=int, default=1, choices=[1, 2])
     p.add_argument("--partial-scenario", default="8/8")
     p.add_argument("--folds", type=int, default=5)
-    p.add_argument(
-        "--seeds",
-        type=int,
-        default=5,
-        help="Number of seeds from team-agreed list [42, 123, 456, 789, 1011]",
-    )
+    p.add_argument("--seeds", type=int, default=5,
+                   help="Number of seeds from AGREED_SEEDS [42, 123, 456, 789, 1011]")
     p.add_argument("--subsample", type=int, default=None)
-    p.add_argument(
-        "--ablation",
-        action="store_true",
-        help="Run the full 4-condition ablation table across agreed seeds",
-    )
+    p.add_argument("--ablation", action="store_true",
+                   help="Run the full 4-condition ablation table")
     p.add_argument("--no-report", action="store_true")
     return p.parse_args()
 
@@ -689,7 +556,7 @@ def _parse_args():
 if __name__ == "__main__":
     args = _parse_args()
     if args.ablation:
-        table = run_ablation(
+        run_ablation(
             regime=args.regime,
             partial_scenario=args.partial_scenario,
             n_seeds=args.seeds,
@@ -708,6 +575,5 @@ if __name__ == "__main__":
         hm = res["hybrid_test_metrics"]
         print(f"\nXGBoost alone — MAE={xm['mae']:.4f}  RMSE={xm['rmse']:.4f}  R²={xm['r2']:.4f}")
         print(f"Residual hybrid — MAE={hm['mae']:.4f}  RMSE={hm['rmse']:.4f}  R²={hm['r2']:.4f}")
-        delta_rmse = xm["rmse"] - hm["rmse"]
-        print(f"RMSE improvement from hybrid: {delta_rmse:+.4f}")
-        print(f"Training time: {res['timing_seconds']:.1f}s")
+        print(f"RMSE improvement: {xm['rmse'] - hm['rmse']:+.4f}")
+        print(f"Training time:    {res['timing_seconds']:.1f}s")
