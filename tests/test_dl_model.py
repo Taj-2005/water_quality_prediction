@@ -168,3 +168,19 @@ class TestWaterQualityMLP:
             init_method=init_method,
         )
         assert model.init_method == init_method
+
+    @pytest.mark.parametrize("activation", ["relu", "gelu", "silu", "leaky_relu", "tanh"])
+    def test_activation_specific_initialization(self, activation: str):
+        """Test weight initialization derives activation-specific gains properly."""
+        model = WaterQualityMLP(
+            input_dim=15,
+            hidden_dims=[30, 15],
+            activation=activation,
+            init_method="kaiming_normal",
+        )
+        nonlin, gain = model._resolve_nonlinearity_and_gain()
+        assert gain > 0.0
+        # Confirm forward pass works after custom initialization
+        x = torch.randn(4, 15)
+        out = model(x)
+        assert out.shape == (4, 1)

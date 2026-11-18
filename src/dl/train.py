@@ -410,6 +410,9 @@ def train(
             best_epoch = epoch
             patience_counter = 0
 
+            # Sanitize config to primitive types for weights_only pickling compatibility
+            safe_cfg = {k: str(v) if isinstance(v, Path) else v for k, v in cfg.items()}
+
             # Save best checkpoint
             torch.save(
                 {
@@ -418,7 +421,7 @@ def train(
                     "optimizer_state_dict": optimizer.state_dict(),
                     "best_val_loss": best_val_loss,
                     "val_metrics": best_val_metrics,
-                    "config": cfg,
+                    "config": safe_cfg,
                     "seed": seed,
                     "y_mean": y_mean,
                     "y_std": y_std,
@@ -438,7 +441,11 @@ def train(
 
     # 8. Reload best checkpoint weights into model
     if checkpoint_path.exists():
-        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        try:
+            ckpt = torch.load(checkpoint_path, map_location=device)
+        except Exception:
+            # Fallback for legacy checkpoints containing unpickled Path objects
+            ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model.load_state_dict(ckpt["model_state_dict"])
         if verbose:
             print(f"Loaded best checkpoint weights from {checkpoint_path} (epoch {best_epoch}).")

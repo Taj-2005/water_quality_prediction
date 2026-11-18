@@ -12,6 +12,7 @@ Part of Phase 2: Water Quality Prediction Deep Learning Extension.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from typing import Any
 
@@ -152,20 +153,58 @@ class WaterQualityMLP(nn.Module):
         # Initialize network weights
         self._initialize_weights()
 
+    def _resolve_nonlinearity_and_gain(self) -> tuple[str, float]:
+        """Derive the appropriate Kaiming nonlinearity and gain from configured activation.
+
+        Ensures that architecture comparisons across ReLU, GELU, and SiLU in Step 3
+        fairly account for activation-specific variance propagation rather than
+        hard-coding a ReLU-only assumption.
+        """
+        act = str(self.activation_name).lower()
+        if act in ("relu",):
+            return "relu", math.sqrt(2.0)
+        elif act in ("leaky_relu", "leakyrelu"):
+            return "leaky_relu", nn.init.calculate_gain("leaky_relu", param=0.01)
+        elif act in ("tanh",):
+            return "tanh", nn.init.calculate_gain("tanh")
+        elif act in ("gelu", "silu", "swish"):
+            # GELU and SiLU are smooth rectifiers asymptotic to ReLU for large positive inputs.
+            # In tabular deep learning (Gorishniy et al., 2021; Grinsztajn et al., 2022),
+            # standard Kaiming scaling (gain = sqrt(2)) maintains unit variance across layers.
+            return "relu", math.sqrt(2.0)
+        else:
+            return "linear", 1.0
+
     def _initialize_weights(self) -> None:
-        """Apply disciplined weight initialization across linear layers."""
+        """Apply disciplined weight initialization across linear layers.
+
+        Hidden layers derive their initialization gain from the configured activation
+        (accounting for ReLU, GELU, SiLU, LeakyReLU, and Tanh), while the final linear
+        regression head is initialized with linear gain (1.0) to prevent initial output explosion.
+        """
+        nonlinearity, gain = self._resolve_nonlinearity_and_gain()
+
+        # Identify the final linear layer (regression output head)
+        linear_layers = [m for m in self.modules() if isinstance(m, nn.Linear)]
+        final_layer = linear_layers[-1] if linear_layers else None
+
         for module in self.modules():
             if isinstance(module, nn.Linear):
+                is_output_head = module is final_layer
+                layer_nonlin = "linear" if is_output_head else nonlinearity
+
                 if self.init_method == "kaiming_normal":
-                    nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
+                    nn.init.kaiming_normal_(module.weight, nonlinearity=layer_nonlin)
                 elif self.init_method == "kaiming_uniform":
-                    nn.init.kaiming_uniform_(module.weight, nonlinearity="relu")
+                    nn.init.kaiming_uniform_(module.weight, nonlinearity=layer_nonlin)
                 elif self.init_method == "xavier_normal":
-                    nn.init.xavier_normal_(module.weight)
+                    layer_gain = 1.0 if is_output_head else gain
+                    nn.init.xavier_normal_(module.weight, gain=layer_gain)
                 elif self.init_method == "xavier_uniform":
-                    nn.init.xavier_uniform_(module.weight)
+                    layer_gain = 1.0 if is_output_head else gain
+                    nn.init.xavier_uniform_(module.weight, gain=layer_gain)
                 else:
-                    nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
+                    nn.init.kaiming_normal_(module.weight, nonlinearity=layer_nonlin)
 
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
