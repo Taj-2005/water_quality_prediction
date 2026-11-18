@@ -3,7 +3,7 @@
 **Author:** Himanshu Pandey  
 **Role:** DL Literature Review, Base MLP, Architecture Ablation  
 **Project:** Water Quality Prediction — Phase 2 (Deep Learning Extension)  
-**BibTeX Sources:** `refs_dl.bib` / `docs/refs_dl.bib`  
+**BibTeX Source:** `docs/refs_dl.bib`  
 
 ---
 
@@ -120,8 +120,8 @@ This literature review synthesizes 12 seminal and state-of-the-art works to answ
 * **Title:** *On Calibration of Modern Neural Networks* \cite{guo2017calibration}
 * **Findings:**
   - Modern deep networks, while highly accurate, are poorly calibrated (overconfident in their predictions).
-  - Explores Expected Calibration Error (ECE), reliability diagrams, and post-hoc temperature scaling to align predicted probabilities/intervals with empirical observation frequencies.
-* **Relevance to Water Quality:** Informs technical validation metrics for evaluating whether 95% predictive intervals actually cover 95% of true water quality observations across geographical stations.
+  - Explores Expected Calibration Error (ECE), reliability diagrams, and post-hoc temperature scaling to align predicted probabilities with empirical observation frequencies.
+* **Relevance to Water Quality:** Informs calibration assessment when continuous indices are discretized into regulatory categories. Because our primary modeling task is continuous index regression (`TARGET_KIND = "regression"`), uncertainty is fundamentally quantified through continuous prediction intervals (PICP/MPIW). ECE applies strictly as a secondary post-hoc diagnostic when continuous WQI scores are binned into the five standard CCME classes (Poor, Marginal, Fair, Good, Excellent).
 
 ---
 
@@ -140,5 +140,6 @@ This literature review synthesizes 12 seminal and state-of-the-art works to answ
 ### Evaluation Metrics Used:
 - **Accuracy / Fit:** Root Mean Squared Error (RMSE), Mean Absolute Error (MAE), Coefficient of Determination ($R^2$).
 - **Multi-Seed Stability:** Mean and standard deviation across 5 fixed random seeds ($seeds = [42, 123, 456, 789, 1011]$).
-- **Uncertainty & Calibration:** Expected Calibration Error (ECE), Prediction Interval Coverage Probability (PICP), Mean Prediction Interval Width (MPIW) via Monte Carlo Dropout.
+- **Uncertainty & Regression Calibration (Primary):** Prediction Interval Coverage Probability (PICP) and Mean Prediction Interval Width (MPIW) evaluated for 90% and 95% intervals via Monte Carlo Dropout ($T=50$ forward passes).
+- **Categorical Calibration (Secondary Post-Hoc):** Expected Calibration Error (ECE) and reliability diagrams, evaluated strictly as a secondary analysis if continuous CCME predictions are categorized into the five discrete regulatory quality bands (Poor, Marginal, Fair, Good, Excellent).
 - **Computational Cost:** Parameter count, wall-clock training duration, and per-sample inference latency.
