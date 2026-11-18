@@ -18,6 +18,7 @@ from src.dl.regularization import (  # noqa: E402
     BASE_CONFIG,
     REGULARIZER_GRID,
     TEAM_SEEDS,
+    aggregate,
     best_combination,
     run_config,
 )
@@ -207,3 +208,127 @@ class TestBestCombination:
             ]
         )
         assert best_combination(agg)["overrides"] == {"dropout": 0.5}
+
+
+class TestSelectionNeverUsesTest:
+    """Selection happens on validation only.
+
+    The shared rules reserve the test split for the final table. Step 2 also asks for
+    test metrics, which is resolved by reading test once for the configuration that
+    validation already chose -- never by ranking configurations on it.
+    """
+
+    def test_best_combination_ignores_test_columns(self):
+        """Adding test columns that contradict the validation ranking changes nothing."""
+        base = [
+            {
+                "family": "none",
+                "config": "unregularized",
+                "val_mae_mean": 1.00,
+                "val_mae_std": 0.01,
+            },
+            {
+                "family": "dropout",
+                "config": "dropout=0.2",
+                "val_mae_mean": 0.80,
+                "val_mae_std": 0.01,
+            },
+        ]
+        without = best_combination(pd.DataFrame(base))
+        with_test = best_combination(
+            pd.DataFrame([{**r, "test_mae_mean": 10.0 - i} for i, r in enumerate(base)])
+        )
+        assert without["overrides"] == with_test["overrides"] == {"dropout": 0.2}
+
+    def test_run_config_does_not_touch_test_by_default(self):
+        """eval_test defaults to False, so a sweep row cannot carry a test number."""
+        import inspect
+
+        from src.dl.regularization import run_config
+
+        assert inspect.signature(run_config).parameters["eval_test"].default is False
+
+
+class TestAggregate:
+    def test_records_the_seed_count_per_config(self):
+        """A reader must be able to see how many seeds a mean and sd came from."""
+        raw = pd.DataFrame(
+            [
+                {
+                    "family": "none",
+                    "config": "unregularized",
+                    "seed": s,
+                    "val_mae": v,
+                    "val_rmse": v,
+                    "val_r2": 0.9,
+                    "generalisation_gap": 0.0,
+                    "epochs_run": 15,
+                }
+                for s, v in zip(
+                    [42, 123, 456, 789, 1011], [0.78, 0.80, 0.77, 0.79, 0.81], strict=True
+                )
+            ]
+        )
+        agg = aggregate(raw)
+        assert agg.n_seeds.iloc[0] == 5
+        assert agg.val_mae_mean.iloc[0] == pytest.approx(0.790, abs=1e-3)
+
+    def test_appending_seeds_matches_a_single_full_sweep(self):
+        """Aggregating 3+2 appended seeds equals aggregating all 5 at once."""
+        rows = [
+            {
+                "family": "none",
+                "config": "unregularized",
+                "seed": s,
+                "val_mae": v,
+                "val_rmse": v,
+                "val_r2": 0.9,
+                "generalisation_gap": 0.0,
+                "epochs_run": 15,
+            }
+            for s, v in zip([42, 123, 456, 789, 1011], [0.78, 0.80, 0.77, 0.79, 0.81], strict=True)
+        ]
+        appended = aggregate(
+            pd.concat([pd.DataFrame(rows[:3]), pd.DataFrame(rows[3:])], ignore_index=True)
+        )
+        at_once = aggregate(pd.DataFrame(rows))
+        pd.testing.assert_frame_equal(
+            appended.reset_index(drop=True), at_once.reset_index(drop=True)
+        )
+
+
+class TestSeedRule:
+    """The shared rules require 5 seeds for every neural model.
+
+    The point of the rule is that a mean without a spread cannot support a claim, and a
+    spread from too few runs is itself unreliable. The whole conclusion of this study is
+    a noise argument, so the seed count is load-bearing rather than cosmetic.
+    """
+
+    def test_run_ablation_defaults_to_every_agreed_seed(self):
+        import inspect
+
+        from src.dl.regularization import run_ablation
+
+        assert tuple(inspect.signature(run_ablation).parameters["seeds"].default) == TEAM_SEEDS
+        assert len(TEAM_SEEDS) == 5
+
+    def test_aggregate_exposes_a_seed_count_for_every_config(self):
+        """No row may hide how many runs its mean and sd came from."""
+        raw = pd.DataFrame(
+            [
+                {
+                    "family": f,
+                    "config": c,
+                    "seed": s,
+                    "val_mae": 0.8,
+                    "val_rmse": 1.0,
+                    "val_r2": 0.9,
+                    "generalisation_gap": 0.0,
+                    "epochs_run": 15,
+                }
+                for f, c in (("none", "unregularized"), ("dropout", "dropout=0.2"))
+                for s in TEAM_SEEDS
+            ]
+        )
+        assert (aggregate(raw).n_seeds == 5).all()

@@ -76,34 +76,75 @@ margin eighteen times smaller than the noise, and a mean-only rule adopted it. T
 plan's rule — a difference smaller than the noise is not claimed as a win — is now
 enforced in `best_combination()` and guarded by a test.
 
-### Results (3 seeds, 200,000 training rows)
+### Results (5 seeds, 200,000 training rows)
 
 | family | best member | val MAE | vs reference | seed sd | verdict |
 | --- | --- | --- | --- | --- | --- |
-| *(none)* | unregularized | 0.7794 | — | 0.0237 | reference |
-| weight decay | `wd=1e-4` | 0.7778 | +0.0016 | 0.0281 | within noise |
-| early stopping | `patience=10` | 0.7794 | +0.0000 | 0.0237 | never fired |
-| lr schedule | `plateau` | 0.7794 | +0.0000 | 0.0237 | never triggered |
-| dropout | `p=0.1` | 0.8111 | −0.0317 | 0.0259 | hurts |
-| batch norm | `batch_norm` | 1.0940 | −0.3146 | 0.0470 | hurts |
+| *(none)* | unregularized | 0.7751 ± 0.0444 | — | 0.0444 | reference |
+| weight decay | `wd=1e-4` | 0.7700 ± 0.0333 | +0.0051 | 0.0444 | within noise |
+| early stopping | `patience=3/5/10` | 0.7751 ± 0.0444 | +0.0000 | 0.0444 | never fired |
+| lr schedule | `plateau` | 0.7751 ± 0.0444 | +0.0000 | 0.0444 | never triggered |
+| dropout | `p=0.1` | 0.7771 ± 0.0528 | −0.0020 | 0.0528 | within noise |
+| batch norm | `batch_norm` | 1.0750 ± 0.0510 | −0.2999 | 0.0510 | **hurts** |
 
-**The recommendation is no regularization**, and the reason is in the first row of the
-table rather than in the comparisons: the unregularized network's generalisation gap is
-`+0.0008` WQI points — essentially zero. At 200,000 rows against a 128-64 network the
-model is capacity-limited, not variance-limited. There is no overfitting to remove, so
-every regularizer can only remove signal, and the two that move the metric at all
-(dropout, batch norm) move it the wrong way by an order of magnitude more than the noise.
+**The recommendation is no regularization**, and the reason is the first row rather than
+the comparisons: the unregularized network's generalisation gap is `+0.0007` WQI points —
+essentially zero. At 200,000 rows against a 128-64 network the model is capacity-limited,
+not variance-limited. There is no overfitting to remove, so a regularizer can only remove
+signal, and the only family that moves the metric beyond the noise (batch norm, −0.30 MAE)
+moves it the wrong way.
+
+### Why the seed count was not a formality
+
+The sweep first ran on 3 seeds. Going to the 5 the shared rules require did not change the
+recommendation, but it changed a verdict and nearly doubled the measured noise:
+
+| | 3 seeds | 5 seeds |
+| --- | --- | --- |
+| reference MAE | 0.7794 ± 0.0237 | 0.7751 ± 0.0444 |
+| `dropout=0.1` | −0.0317, **"hurts"** | −0.0020, **"within noise"** |
+| `wd=1e-4` margin | +0.0016 vs 0.0237 noise | +0.0051 vs 0.0444 noise |
+
+At 3 seeds I would have told Himanshu and Jivit that dropout at 0.1 measurably hurts. At 5
+it is indistinguishable from the reference — the two added seeds put it at 0.7261, well
+inside the spread. The conclusion survived; one of the claims underneath it did not. That
+is the rule working, not a technicality: the spread itself is an estimate, and at 3 points
+it was understating the noise by roughly half.
 
 Three caveats I will not let the table hide:
 
 1. **The early-stopping and plateau rows are not results.** `epochs_run` is 15.0 for every
-   run in the sweep, so early stopping never fired at any patience and the scheduler never
-   triggered. Those rows are numerically identical to the reference because they *are* the
-   reference. They say the mechanism was never exercised, not that it is neutral.
-2. **`wd=1e-4` is not a win** even though it sorts first. 0.0016 against 0.0281 is noise.
+   run, so early stopping never fired at any patience and the scheduler never triggered.
+   Those rows are numerically identical to the reference because they *are* the reference.
+   They say the mechanism was never exercised, not that it is neutral.
+2. **`wd=1e-4` is not a win** even though it sorts first — its margin sits about nine times
+   inside the seed spread.
 3. **The conclusion is conditional on capacity and training size.** It is not a general
-   claim that this dataset needs no regularization — it is a measurement at one point in
+   claim that this dataset needs no regularization; it is a measurement at one point in
    that space, and it should be re-run if either grows.
+
+### One read of the test split
+
+Step 2 asks for validation *and* test metrics; the shared rules say test rows are used once
+and that tuning uses validation only. Scoring all fourteen configurations on test would
+make the test split a second selection surface, which is the failure the one-use rule
+exists to prevent. So selection is made on validation alone, and test is read exactly once
+for the configuration that selection chose (`--confirm-on-test`). That number confirms the
+choice; it did not inform it.
+
+| split | MAE | RMSE | R² |
+| --- | --- | --- | --- |
+| validation | 0.7751 ± 0.0444 | 1.2571 ± 0.0412 | 0.9954 |
+| test | 0.7774 ± 0.0443 | 1.2544 ± 0.0407 | 0.9955 |
+
+Test sits `+0.0023` above validation, far inside the seed spread of `0.0444`: validation
+was not optimistic about this configuration. The validation figure also reproduces the
+ablation's reference row exactly, which independently confirms the sweep is deterministic
+under the agreed seeds.
+
+Both numbers are measured at the study's 200,000-row scale, so neither is the MLP's final
+test score — that comes from Parth's full-scale comparison in `10_final_comparison.ipynb`.
+Quoting this as the headline result would overstate what it is.
 
 Results, the loss curves and the per-family verdicts are in
 `notebooks/13_regularization.ipynb`, `reports/regularization_ablation.csv` and

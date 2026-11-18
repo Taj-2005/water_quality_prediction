@@ -139,7 +139,7 @@ def run_config(
     """Train one configuration and return its validation (and optionally test) metrics."""
     from src.dl.model import WaterQualityMLP
     from src.dl.seeds import set_seed
-    from src.dl.train import train
+    from src.dl.train import evaluate_loader, get_device, get_loss_function, train
 
     cfg = {**(base or BASE_CONFIG), **overrides}
     set_seed(seed)
@@ -162,11 +162,28 @@ def run_config(
         "scheduler": cfg["scheduler"],
         "scheduler_patience": cfg.get("scheduler_patience", 2),
         "seed": seed,
-        "eval_test": eval_test,
+        # The test evaluation is done below rather than inside train(), which computes
+        # it but returns only (history, best_val) -- the numbers would be unreachable.
+        "eval_test": False,
         "log_to_csv": False,
         "verbose": verbose,
     }
     history, best_val = train(model, loaders, train_cfg)
+
+    # train() reloads the best checkpoint before returning, so the model carries the
+    # weights that produced best_val. Mirror its device, criterion and target scaling.
+    test: dict[str, float] = {}
+    if eval_test:
+        device = get_device(None)
+        _, test = evaluate_loader(
+            model.to(device),
+            loaders.test,
+            get_loss_function(cfg["loss"]).to(device),
+            device,
+            y_mean=loaders.y_mean,
+            y_std=loaders.y_std,
+            scale_target=loaders.scale_target,
+        )
 
     n_params = sum(p.numel() for p in model.parameters())
     gap = (
@@ -184,6 +201,15 @@ def run_config(
         "final_train_loss": history["train_loss"][-1] if history["train_loss"] else float("nan"),
         "final_val_loss": history["val_loss"][-1] if history["val_loss"] else float("nan"),
         "generalisation_gap": gap,
+        **(
+            {
+                "test_mae": test.get("mae", float("nan")),
+                "test_rmse": test.get("rmse", float("nan")),
+                "test_r2": test.get("r2", float("nan")),
+            }
+            if eval_test
+            else {}
+        ),
         "history": history,
     }
 
@@ -192,7 +218,7 @@ def run_config(
 # The sweep
 # ---------------------------------------------------------------------------
 def run_ablation(
-    seeds=(42, 123, 456),
+    seeds=TEAM_SEEDS,
     train_rows: int | None = 200_000,
     grid=None,
     verbose: bool = True,
@@ -216,16 +242,27 @@ def run_ablation(
             print(f"  {family:15} {label:16} val MAE {mae:7.4f}  ({len(last)} seeds)")
 
     raw = pd.DataFrame(rows)
-    agg = (
-        raw.groupby(["family", "config"])[
-            ["val_mae", "val_rmse", "val_r2", "generalisation_gap", "epochs_run"]
-        ]
-        .agg(["mean", "std"])
-        .round(4)
-    )
+    return raw, aggregate(raw)
+
+
+def aggregate(raw: pd.DataFrame) -> pd.DataFrame:
+    """Mean and standard deviation per configuration across seeds.
+
+    Split out from ``run_ablation`` so a sweep extended with further seeds
+    re-aggregates exactly the same way as the original run.
+    """
+    cols = [
+        c
+        for c in ("val_mae", "val_rmse", "val_r2", "generalisation_gap", "epochs_run")
+        if c in raw.columns
+    ]
+    agg = raw.groupby(["family", "config"])[cols].agg(["mean", "std"]).round(4)
     agg.columns = ["_".join(c) for c in agg.columns]
-    agg = agg.reset_index().sort_values("val_mae_mean")
-    return raw, agg
+    agg = agg.reset_index()
+    agg["n_seeds"] = (
+        raw.groupby(["family", "config"])["seed"].nunique().reset_index(drop=True).to_numpy()
+    )
+    return agg.sort_values("val_mae_mean")
 
 
 def best_combination(agg: pd.DataFrame) -> dict[str, Any]:
@@ -293,12 +330,111 @@ def loss_curves(train_rows: int | None = 200_000, seed: int = SEED, regularized=
     return off["history"], on["history"], regularized
 
 
+def confirm_on_test(
+    overrides: dict[str, Any] | None = None,
+    seeds=TEAM_SEEDS,
+    train_rows: int | None = 200_000,
+    label: str = "recommended",
+) -> pd.DataFrame:
+    """Evaluate the recommended configuration on the test split, once, over all seeds.
+
+    Two rules in the work plan pull against each other here. Step 2 asks for "an
+    ablation table with validation and test metrics", while the shared rules say test
+    rows "are used once, for the final table" and that tuning uses validation only.
+
+    Scoring all fourteen configurations on test would resolve that the wrong way: it
+    would turn the test split into a second selection surface, which is the failure the
+    shared rule exists to prevent. So selection is made on validation alone, and test is
+    read exactly once, for the configuration that selection already chose. The number
+    confirms the choice; it does not inform it.
+    """
+    overrides = overrides or {}
+    arrays = prepare_data(train_rows=train_rows)
+    rows = []
+    for s in seeds:
+        r = run_config(arrays, overrides, seed=s, eval_test=True)
+        r.pop("history", None)
+        rows.append({"config": label, **r})
+        print(
+            f"  seed {s:5}  val MAE {r['val_mae']:.4f}   test MAE {r['test_mae']:.4f}",
+            flush=True,
+        )
+    return pd.DataFrame(rows)
+
+
+def _append_seeds(seeds, train_rows: int = 200_000) -> None:
+    """Add seeds to the saved sweep without recomputing the ones already measured."""
+    raw_path = RESULTS_DIR / "regularization_ablation_raw.csv"
+    if not raw_path.exists():
+        raise FileNotFoundError(
+            f"No existing sweep at {raw_path}. Run 'python -m src.dl.regularization' first."
+        )
+    existing = pd.read_csv(raw_path)
+    have = set(existing.seed.unique())
+    todo = [s for s in seeds if s not in have]
+    if not todo:
+        print(f"seeds {seeds} already present; nothing to do.")
+        return
+
+    print(f"existing seeds {sorted(have)} -> adding {todo}\n")
+    extra, _ = run_ablation(seeds=tuple(todo), train_rows=train_rows)
+    raw = pd.concat([existing, extra], ignore_index=True)
+    agg = aggregate(raw)
+
+    raw.to_csv(raw_path, index=False)
+    agg.to_csv(RESULTS_DIR / "regularization_ablation.csv", index=False)
+    print(f"\nAblation over {raw.seed.nunique()} seeds:")
+    print(agg.to_string(index=False))
+
+    best = best_combination(agg)
+    print(f"\nReference (unregularized): MAE {best['baseline_mae']} +/- {best['baseline_sd']}")
+    print(f"Adopted: {best['adopted'] or 'none — no family cleared the noise'}")
+    print(f"Recommended configuration: {best['overrides'] or 'NO REGULARIZATION'}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--quick", action="store_true", help="1 seed, small budget")
-    ap.add_argument("--seeds", type=int, default=3, help="seeds from the agreed list")
+    # The shared rules require 5 seeds for every neural model, so that is the default
+    # rather than something a caller has to remember to ask for.
+    ap.add_argument(
+        "--seeds", type=int, default=len(TEAM_SEEDS), help="how many of the agreed seeds to use"
+    )
     ap.add_argument("--train-rows", type=int, default=200_000)
+    ap.add_argument(
+        "--confirm-on-test",
+        action="store_true",
+        help="Evaluate the recommended configuration on the test split, once, over 5 seeds.",
+    )
+    ap.add_argument(
+        "--append-seeds",
+        type=int,
+        nargs="+",
+        help=(
+            "Extend the saved sweep with these additional seeds and re-aggregate, "
+            "instead of re-running every seed from scratch."
+        ),
+    )
     args = ap.parse_args()
+
+    if args.append_seeds:
+        _append_seeds(args.append_seeds, train_rows=args.train_rows)
+        return
+
+    if args.confirm_on_test:
+        agg = pd.read_csv(RESULTS_DIR / "regularization_ablation.csv")
+        best = best_combination(agg)
+        chosen = best["overrides"]
+        print(f"selected on validation only: {chosen or 'NO REGULARIZATION'}\n")
+        df = confirm_on_test(chosen, train_rows=args.train_rows)
+        df.to_csv(RESULTS_DIR / "regularization_test_confirmation.csv", index=False)
+        print(
+            f"\n  val  MAE {df.val_mae.mean():.4f} +/- {df.val_mae.std():.4f}"
+            f"\n  test MAE {df.test_mae.mean():.4f} +/- {df.test_mae.std():.4f}"
+            f"   R2 {df.test_r2.mean():.4f}"
+        )
+        print(f"\nwrote {RESULTS_DIR / 'regularization_test_confirmation.csv'}")
+        return
 
     seeds = TEAM_SEEDS[: 1 if args.quick else args.seeds]
     rows = 20_000 if args.quick else args.train_rows

@@ -308,9 +308,41 @@ python -m src.run_evaluation
 # 5. Rebuild LaTeX tables for the IEEE report directly from results/*.csv
 python report/make_tables.py
 
-# 6. Run unit test suite (135 tests across 7 modules, runs without dataset)
+# 6. Run unit test suite (195 tests across 12 modules)
+#    Tests needing data/splits/ skip automatically when it is absent.
 pytest tests/
 ```
+
+### Phase 2 — neural-network data prep and regularization (Taj)
+
+Both steps read the Phase 1 split indices from step 2 above, so run `python -m src.split`
+first. Every transform is fitted on the training split only.
+
+```bash
+# NN input pipeline: print the skew and conditioning evidence tables
+python -m src.dl.nn_preprocess --report
+
+# ...and the short MLP comparison of phase1 / yeo-johnson / quantile / robust
+python -m src.dl.nn_preprocess --report --compare
+
+# Regularization sweep: dropout, weight decay, batch norm, early-stopping
+#    patience and lr schedule, one at a time, over 5 seeds.
+#    ~55 min on CPU for 14 configs x 5 seeds at 200,000 training rows.
+python -m src.dl.regularization --seeds 5      # -> reports/regularization_ablation*.csv
+
+# Faster check that the machinery works (1 seed, 3 configs, 20,000 rows, ~2 min)
+python -m src.dl.regularization --quick
+
+# Extend a finished sweep with more seeds instead of recomputing it
+python -m src.dl.regularization --append-seeds 789 1011
+
+# One read of the test split, for the configuration validation already selected
+python -m src.dl.regularization --confirm-on-test
+```
+
+`notebooks/11_nn_data_prep.ipynb` writes `reports/nn_preprocess_*.csv` and its figures.
+`notebooks/13_regularization.ipynb` reads the ablation CSVs produced above and writes its
+two figures; it does not re-run the sweep.
 
 ### Generating `clean.csv`
 
