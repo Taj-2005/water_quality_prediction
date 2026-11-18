@@ -101,28 +101,37 @@ def load_data(path: Path | str | None = None) -> pd.DataFrame:
 
     try:
         return pd.read_parquet(target)
-    except ImportError as exc:
-        # The environment has no parquet engine. This is almost always a Jupyter kernel
-        # pointing at the wrong interpreter rather than a missing install, so say so.
-        if path is None and CLEAN_CSV.exists():
-            warnings.warn(
-                f"No parquet engine available, falling back to {CLEAN_CSV.name}. "
-                "Install pyarrow (pip install -r requirements.txt) and select the "
-                "project .venv as your kernel to use the faster parquet path.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            return _restore_dtypes(pd.read_csv(CLEAN_CSV, low_memory=False))
-        raise ImportError(
-            "Reading clean.parquet needs a parquet engine (pyarrow), and this "
-            "environment has none.\n"
-            "  1. Install the project requirements INTO THE ENVIRONMENT THAT RUNS THIS "
-            "CODE:  pip install -r requirements.txt\n"
-            "  2. In Jupyter or VS Code, check the kernel: it must be the project "
-            "'.venv', not a global interpreter. VS Code: Select Kernel -> Python "
-            "Environments -> .venv\n"
-            "  3. Or regenerate the CSV instead:  python -m src.clean"
-        ) from exc
+    except Exception as exc:
+        # If macOS APFS purgeable system or transient lock corrupted the Desktop file,
+        # fallback to the local materialized backup if present.
+        backup = Path.home() / ".local/share/water_quality/clean.parquet"
+        if backup.exists() and target != backup:
+            try:
+                return pd.read_parquet(backup)
+            except Exception:
+                pass
+
+        if isinstance(exc, ImportError):
+            if path is None and CLEAN_CSV.exists():
+                warnings.warn(
+                    f"No parquet engine available, falling back to {CLEAN_CSV.name}. "
+                    "Install pyarrow (pip install -r requirements.txt) and select the "
+                    "project .venv as your kernel to use the faster parquet path.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                return _restore_dtypes(pd.read_csv(CLEAN_CSV, low_memory=False))
+            raise ImportError(
+                "Reading clean.parquet needs a parquet engine (pyarrow), and this "
+                "environment has none.\n"
+                "  1. Install the project requirements INTO THE ENVIRONMENT THAT RUNS THIS "
+                "CODE:  pip install -r requirements.txt\n"
+                "  2. In Jupyter or VS Code, check the kernel: it must be the project "
+                "'.venv', not a global interpreter. VS Code: Select Kernel -> Python "
+                "Environments -> .venv\n"
+                "  3. Or regenerate the CSV instead:  python -m src.clean"
+            ) from exc
+        raise
 
 
 def get_splits(

@@ -287,6 +287,26 @@ def get_split_data(
     )
 
 
+def get_split_groups(
+    splits_dir: Path | str | None = None,
+    df: pd.DataFrame | None = None,
+    group_col: str = "Area",
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Return group label series for (train, val, test) partitions."""
+    train_df, val_df, test_df = get_split_data(df=df, splits_dir=splits_dir)
+    return train_df[group_col], val_df[group_col], test_df[group_col]
+
+
+def get_train_groups(
+    splits_dir: Path | str | None = None,
+    df: pd.DataFrame | None = None,
+    group_col: str = "Area",
+) -> pd.Series:
+    """Return the group labels ('Area') for the training partition."""
+    train_groups, _, _ = get_split_groups(splits_dir=splits_dir, df=df, group_col=group_col)
+    return train_groups
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate and validate project splits.")
     parser.add_argument("--save-csv", action="store_true", help="Also save splits.csv")

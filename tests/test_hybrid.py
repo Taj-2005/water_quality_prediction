@@ -93,6 +93,39 @@ def test_ablation_has_four_conditions(tmp_path):
     assert out.exists()
 
 
+def test_agreed_seeds():
+    """Seeds must match the 5 team-agreed seeds from the literature review."""
+    assert hybrid.AGREED_SEEDS == [42, 123, 456, 789, 1011]
+
+
+def test_oof_group_leakage_zero_overlap():
+    """GroupKFold must guarantee zero Area overlap between train folds and holdout folds."""
+    from sklearn.model_selection import GroupKFold
+
+    # 10 rows from 5 distinct stations
+    groups = np.array(["Station_A", "Station_A", "Station_B", "Station_B",
+                       "Station_C", "Station_C", "Station_D", "Station_D",
+                       "Station_E", "Station_E"])
+    X = pd.DataFrame({"feat": np.arange(10.0)})
+    y = pd.Series(np.arange(10.0))
+
+    gkf = GroupKFold(n_splits=5)
+    for trn_idx, oof_idx in gkf.split(X, y, groups=groups):
+        trn_groups = set(groups[trn_idx])
+        oof_groups = set(groups[oof_idx])
+        # Zero group overlap contract
+        assert len(trn_groups.intersection(oof_groups)) == 0
+
+
+def test_get_train_groups_availability():
+    """src.split.get_train_groups must return training Area labels."""
+    from src.split import get_train_groups
+
+    train_groups = get_train_groups()
+    assert len(train_groups) > 0
+    assert train_groups.nunique() > 1000
+
+
 if __name__ == "__main__":
     import tempfile
     from pathlib import Path
