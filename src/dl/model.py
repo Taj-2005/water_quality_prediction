@@ -112,7 +112,9 @@ class WaterQualityMLP(nn.Module):
 
         self.input_dim = input_dim
         self.hidden_dims = tuple(hidden_layers)
-        self.activation_name = activation if isinstance(activation, str) else activation.__class__.__name__
+        self.activation_name = (
+            activation if isinstance(activation, str) else activation.__class__.__name__
+        )
         self.dropout_rate = float(dropout)
         self.use_batch_norm = bool(use_batch_norm)
         self.use_layer_norm = bool(use_layer_norm)

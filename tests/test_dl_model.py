@@ -38,6 +38,16 @@ class TestWaterQualityMLP:
         assert not model.use_layer_norm
         assert model.count_parameters() > 0
 
+    def test_get_activation(self):
+        """Test get_activation helper resolves strings and passes through modules."""
+        assert isinstance(get_activation("relu"), nn.ReLU)
+        assert isinstance(get_activation("gelu"), nn.GELU)
+        assert isinstance(get_activation("silu"), nn.SiLU)
+        custom_act = nn.Sigmoid()
+        assert get_activation(custom_act) is custom_act
+        with pytest.raises(ValueError, match="Unsupported activation"):
+            get_activation("non_existent_activation")
+
     def test_forward_output_shape(self):
         """Test forward pass generates correct shape (batch_size, 1)."""
         model = WaterQualityMLP(input_dim=10, hidden_dims=[32, 16], output_dim=1)
