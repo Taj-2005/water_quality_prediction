@@ -21,6 +21,7 @@ import pytest
 
 from src.dl import hybrid
 from src.models_xgb import HAS_XGB
+from tests.conftest import requires_parquet_engine, requires_phase1_splits
 
 QUICK = {"subsample": 2000, "save_reports": False, "n_folds": 2, "epochs": 2}
 
@@ -63,6 +64,8 @@ def test_oof_group_leakage_zero_overlap():
         assert len(trn_groups.intersection(oof_groups)) == 0
 
 
+@requires_parquet_engine
+@requires_phase1_splits
 def test_get_train_groups_availability():
     """src.split.get_train_groups must return training Area labels."""
     from src.split import get_train_groups
@@ -72,10 +75,14 @@ def test_get_train_groups_availability():
     assert train_groups.nunique() > 1000
 
 
-def test_load_train_groups_fails_fast_on_mismatch():
+def test_load_train_groups_fails_fast_on_mismatch(monkeypatch):
     """_load_train_groups must raise RuntimeError on invalid/unmatched indices."""
+    monkeypatch.setattr(
+        "src.split.get_train_groups",
+        lambda: pd.Series(["SiteA", "SiteB"], index=[100, 200]),
+    )
     invalid_df = pd.DataFrame({"feat": [1.0, 2.0]}, index=[-999999, -888888])
-    with pytest.raises(RuntimeError, match="Index mismatch|Failed to load"):
+    with pytest.raises(RuntimeError, match="Index mismatch"):
         hybrid._load_train_groups(invalid_df)
 
 
@@ -134,6 +141,8 @@ def test_oof_xgb_predictions_shape_and_leakage_contract():
 
 
 @pytest.mark.skipif(not HAS_XGB, reason="xgboost is not installed")
+@requires_parquet_engine
+@requires_phase1_splits
 def test_train_hybrid_returns_metrics():
     """train_hybrid must return expected evaluation dict with PyTorch backend."""
     res = hybrid.train_hybrid(**QUICK)
@@ -150,6 +159,8 @@ def test_train_hybrid_returns_metrics():
 
 
 @pytest.mark.skipif(not HAS_XGB, reason="xgboost is not installed")
+@requires_parquet_engine
+@requires_phase1_splits
 def test_hybrid_prediction_is_additive():
     """ŷ_hybrid must equal ŷ_xgb + ŷ_mlp_residual mathematically in train_hybrid."""
     res = hybrid.train_hybrid(**QUICK)
@@ -164,6 +175,8 @@ def test_hybrid_prediction_is_additive():
 
 
 @pytest.mark.skipif(not HAS_XGB, reason="xgboost is not installed")
+@requires_parquet_engine
+@requires_phase1_splits
 def test_results_appended_to_csv(tmp_path: Path):
     """Multiple runs should append to CSV without overwriting."""
     csv_path = tmp_path / "test_hybrid_results.csv"
@@ -182,6 +195,8 @@ def test_results_appended_to_csv(tmp_path: Path):
 
 
 @pytest.mark.skipif(not HAS_XGB, reason="xgboost is not installed")
+@requires_parquet_engine
+@requires_phase1_splits
 def test_ablation_has_four_conditions_on_val(tmp_path: Path):
     """Ablation table must evaluate all 4 specified conditions on validation split."""
     out = tmp_path / "hybrid_ablation.csv"
