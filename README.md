@@ -344,6 +344,26 @@ python -m src.dl.regularization --confirm-on-test
 `notebooks/13_regularization.ipynb` reads the ablation CSVs produced above and writes its
 two figures; it does not re-run the sweep.
 
+### Phase 2 — Base MLP, Architecture Ablation and Hyperparameter Tuning (Himanshu)
+
+Reads the Phase 1 split indices, trains the base neural baseline, and executes the systematic architecture ablation (depth 1–5, width schemes, activation functions under dynamic variance scaling) and Optuna hyperparameter optimization.
+
+```bash
+# Architecture sweep and validation-only Optuna tuning:
+# Sweeps depth, width, activations across seeds, runs Optuna study,
+# evaluates tuned model on 5 seeds on validation and test, and generates diagnostic figures.
+python -m src.dl.architecture --seeds 3 --train-rows 100000 --trials 10
+
+# Fast verification / smoke test (1 seed, 20,000 rows, 3 epochs, ~30s)
+python -m src.dl.architecture --quick
+
+# Run unit tests for architecture and model modules
+pytest tests/test_architecture.py tests/test_dl_model.py
+```
+
+`notebooks/12_base_mlp.ipynb` documents the base neural baseline against naive predictor.  
+`notebooks/14_architecture.ipynb` presents the systematic ablation, Optuna search trajectory, multi-seed comparative benchmark (`reports/mlp_results.csv`), and architecture justification note.
+
 ### Generating `clean.csv`
 
 `clean.csv` is **git-ignored and never committed** — at 559 MiB it exceeds GitHub's
