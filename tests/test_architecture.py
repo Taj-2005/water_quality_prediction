@@ -136,6 +136,7 @@ class TestOptunaTuning:
     """Verify that validation-only Optuna search runs smoothly."""
 
     def test_optuna_tuning_smoke(self):
+        pytest.importorskip("optuna", reason="optuna is not installed in CI runner")
         arrays = tiny_arrays(n_train=100, n_eval=40)
         best_cfg, trials_df = run_optuna_tuning(
             arrays=arrays,
@@ -154,6 +155,7 @@ class TestResultsTable:
     """Verify the comparative mlp_results.csv schema and content."""
 
     def test_run_multiseed_evaluation_and_plots(self, tmp_path, monkeypatch):
+        pytest.importorskip("matplotlib", reason="matplotlib is not installed in CI runner")
         from src.dl.architecture import generate_architecture_plots, run_multiseed_evaluation
 
         arrays = tiny_arrays(n_train=100, n_eval=30)
