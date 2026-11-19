@@ -1,0 +1,6 @@
+model,architecture,n_params,val_mae_mean,val_mae_std,val_rmse_mean,val_rmse_std,val_r2_mean,val_r2_std,test_mae,test_rmse,test_r2,notes
+Naive Baseline (Mean),Statistical Mean,1,14.8069,0.0,18.5284,0.0,0.0,0.0,14.7725,18.5081,0.0,Global training mean baseline
+Random Forest (Phase 1),"100 Trees, max_depth=15",2340000,0.4031,0.0,0.9075,0.0,0.9976,0.0,0.4078,0.9197,0.9976,Phase 1 tree benchmark
+XGBoost (Phase 1),"1991 Trees, depth=7, tuned",1250000,0.104,0.0,0.3549,0.0,0.9996,0.0,0.0999,0.3282,0.9997,Phase 1 champion tree model
+Base MLP (Phase 2),128-64 ReLU,11649,1.0454,0.028,1.5889,0.0397,0.9927,0.0004,1.0499,1.595,0.9927,Untuned baseline feedforward network (Step 2)
+Tuned MLP (Phase 2),"(256, 256, 256, 256) gelu",204289,0.5565,0.0427,0.9454,0.0517,0.9974,0.0003,0.5606,0.9554,0.9974,Optimal architecture after Step 3 ablation & tuning
