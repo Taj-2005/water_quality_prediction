@@ -52,7 +52,13 @@
 ### Step 3: Base MLP Training & Team Handoff (In Progress on `feat/himanshu-base-mlp`)
 - Built the end-to-end training pipeline executing Parth's DataLoader and training loop with early stopping on validation loss.
 - Evaluated on identical Phase 1 train/validation/test splits, logging metrics to `reports/dl_runs.csv`.
-- Validated that the base MLP comfortably outperforms the naive baseline (predicting mean `CCME_Values`), providing the working foundation for Taj (regularization), Jivit (hybrid), and Satya (calibration).
+- Validated that the base MLP decisively beats the naive baseline:
+  - **Mean Baseline:** Val MAE = 14.8069, Val RMSE = 18.5600, Val R² = -0.0006
+  - **Base MLP (Ours):** Val MAE = 1.2385, Val RMSE = 1.7581, Val R² = 0.9910
+- Saved best checkpoint to `checkpoints/base_mlp.pt` and generated diagnostic plots:
+  - Learning curves: `reports/figures/base_mlp_learning_curves.png`
+  - Parity & residuals: `reports/figures/base_mlp_residuals.png`
+- Handoff status: Base MLP trains end-to-end and provides the working baseline directly unblocking Taj (regularization), Jivit (hybrid), and Satya (calibration).
 
 ### Step 4: Architecture Ablation Study (Upcoming on `feat/himanshu-architecture`)
 - Evaluated depth sweeps (2, 3, 4, 5 hidden layers) to test representation capacity vs. gradient decay.
