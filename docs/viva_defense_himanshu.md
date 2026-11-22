@@ -119,9 +119,13 @@ If the teacher asks: *"Show me your code or tell me how it works."*
 
 ---
 
-### Q3: "Why did you use GELU instead of ReLU?"
-> **Answer to say:**  
-> *"ReLU has a sharp corner at zero and kills negative gradients completely. In a 4-layer network, neurons can get stuck at zero and die. GELU has a smooth, curved shape and allows small negative gradients to pass through. This keeps all neurons active and smooths the loss landscape, which helped our 4-layer network reach 0.53 MAE."*
+### Q3: "Why did you use GELU instead of standard ReLU? And why not LeakyReLU?"
+> **Answer to say (simple and direct):**  
+> *"Both LeakyReLU and GELU fix the dying ReLU problem, but **GELU is mathematically smoother and works better in deep networks**:*
+> 
+> 1. **Smooth curve vs. Sharp corner:** LeakyReLU has a sharp, jagged corner at zero where the slope instantly jumps from 0.01 to 1.0. GELU is completely smooth everywhere (infinitely differentiable, $C^\infty$). Gradient descent (AdamW) optimizes much more smoothly on a curved surface than on sharp kinks.
+> 2. **Adaptive gating instead of an arbitrary slope:** LeakyReLU uses a hardcoded fixed slope (usually 0.01) for all negative values. GELU is based on the normal distribution—it acts like a soft probabilistic gate, keeping small negative values while naturally filtering out large extreme negative outliers.
+> 3. **Our ablation results:** In our initial 2-layer ablation, LeakyReLU only reduced MAE slightly (1.0319 vs 1.0340 for ReLU). But when scaling to a deeper 4-layer network in Optuna, GELU's smooth gradient flow prevented optimization stalls, reaching our best score of **0.531 MAE**."*
 
 ---
 
