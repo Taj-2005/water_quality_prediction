@@ -606,20 +606,49 @@ shared by all five of us. Correctness on the real data is demonstrated by
 
 ---
 
-## 10. Phase 2 preview
+## 10. Phase 2 Final Comparison & Technical Validation
 
-Phase 2 adds the deep learning model **on the same split and preprocessing**, then
-compares it fairly against the Phase 1 tree models:
+Phase 2 compares the deep learning model and residual hybrid fairly against the Phase 1 tree benchmarks on the identical, leakage-safe split:
 
-- Deep learning literature review: MLPs on tabular data, regularization, uncertainty.
-- A regularized MLP in PyTorch — dropout, weight decay, early stopping, batch norm —
-  with the output head matched to the target (regression head for an index,
-  classification head only for a defined class scheme).
-- Architecture justification: why this depth, width and head suit this problem.
-- Ablations on depth, width, regularization, and with/without engineered features.
-- Optional **hybrid** for additional marks, only where technically justified — e.g. an
-  MLP trained on XGBoost residuals, compared fairly against each model alone.
-- Technical validation: calibration, uncertainty, and leakage checks.
+> [!IMPORTANT]
+> **Formula-Approximation Benchmark (Surrogate Emulator)**:
+> In this project, `CCME_Values` is mathematically computed from 8 physical and chemical parameters (`Ammonia`, `BOD`, `Dissolved Oxygen`, `Orthophosphate`, `pH`, `Temperature`, `Nitrogen`, `Nitrate`). Therefore, all Regime 1 models are benchmarked as **formula approximators / surrogate emulators**, NOT independent environmental forecasters.
+
+### 10.1 Multi-Seed Final Comparison Results (5 Seeds)
+
+Evaluated across the 5 team-agreed literature seeds (`[42, 123, 456, 789, 1011]`) on the held-out test split (415,804 rows):
+
+#### Table 1: Controlled Subsample Benchmark (Exact 20,000 Rows, 5 Seeds)
+*Strict mathematical parity: every model trained on the exact same 20,000 observations across all 5 seeds.*
+
+| Model | Parameters | Train Time (s) | Test MAE (mean ± std) | Test RMSE (mean ± std) | Test $R^2$ (mean ± std) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Naive Baseline** | 1 | 0.0001s | 14.8991 ± 0.0159 | 18.6559 ± 0.0012 | -0.0006 ± 0.0001 |
+| **Tuned MLP** | 204,289 | 17.48s | 1.1464 ± 0.0537 | 1.7295 ± 0.0721 | 0.9914 ± 0.0007 |
+| **Random Forest** | 185,636 ± 3,130 | 0.42s | 0.6545 ± 0.0148 | 1.4543 ± 0.0504 | 0.9939 ± 0.0004 |
+| **Residual Hybrid** | 46,809 | 34.81s | 0.3022 ± 0.0499 | 0.6356 ± 0.0824 | 0.9988 ± 0.0003 |
+| **XGBoost** | 111,228 ± 5,881 | 47.02s | **0.2130 ± 0.0085** | **0.5602 ± 0.0284** | **0.9991 ± 0.0001** |
+
+#### Table 2: Project Scale Benchmark (Phase 1 & Phase 2 Capacities)
+*Models evaluated at their standard operating capacities on the test split.*
+
+| Model | Training Samples | Parameters | Test MAE | Test RMSE | Test $R^2$ |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Naive Baseline** | 1,986,397 | 1 | 14.7725 | 18.5081 | 0.0000 |
+| **Tuned MLP** | 200,000 | 204,289 | 0.5344 | 0.9306 | 0.9975 |
+| **Random Forest** | 100,000 | 2,340,000 | 0.4078 | 0.9197 | 0.9976 |
+| **Residual Hybrid** | 20,000 | 46,809 | 0.4110 | 0.8521 | 0.9979 |
+| **XGBoost (Full)** | 1,986,397 | 1,250,000 | **0.1000** | **0.3282** | **0.9997** |
+
+### 10.2 Technical Validation & Anti-Leakage Audit
+All five technical validation checks automated in `reports/leakage_check.csv` pass:
+- **Partition disjointness**: zero row overlap between train, val, and test splits ($0$ leaks).
+- **Preconditioning isolation**: `QuantileTransformer` fitted strictly on train partition.
+- **Target standardization**: mean and standard deviation computed strictly from `y_train`.
+- **Spatial GroupKFold isolation**: zero overlapping monitoring stations (`Area`) in OOF evaluation folds.
+- **Forbidden features**: formula components (`F1`, `F2`, `F3`, `excursions`, `CCME_WQI`) strictly excluded.
+
+Full details and theoretical derivations: see [docs/notes_phase2_parth.md](docs/notes_phase2_parth.md).
 
 ---
 
