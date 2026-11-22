@@ -9,10 +9,23 @@ Provides:
 Contributors:
   * Parthraj Singh Bhati (Data loaders, training loop, seeds)
   * Himanshu Pandey (Model architecture, base MLP, ablations)
+  * Satya Yadav (Calibration, uncertainty, prediction intervals, explainability)
 """
 
 from __future__ import annotations
 
+from src.dl.calibration import (
+    calibrate_conformal_quantile,
+    calibration_summary,
+    category_calibration_summary,
+    conformal_prediction_intervals,
+    expected_calibration_error,
+    mc_dropout_prediction_intervals,
+    monte_carlo_dropout_predict,
+    permutation_feature_importance_mlp,
+    prediction_interval_coverage,
+    reliability_diagram_data,
+)
 from src.dl.data import LoadersBundle, WaterQualityDataset, get_loaders
 from src.dl.model import WaterQualityMLP, create_mlp, get_activation
 from src.dl.nn_preprocess import build_nn_preprocessor, transform_splits
@@ -35,4 +48,14 @@ __all__ = [
     "log_run",
     "get_loss_function",
     "get_device",
+    "prediction_interval_coverage",
+    "calibrate_conformal_quantile",
+    "conformal_prediction_intervals",
+    "monte_carlo_dropout_predict",
+    "mc_dropout_prediction_intervals",
+    "permutation_feature_importance_mlp",
+    "reliability_diagram_data",
+    "expected_calibration_error",
+    "category_calibration_summary",
+    "calibration_summary",
 ]
