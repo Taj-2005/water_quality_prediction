@@ -108,16 +108,23 @@ def _load_train_groups(X_train: pd.DataFrame) -> pd.Series:
 def _oof_xgb_predictions(
     X_train: pd.DataFrame,
     y_train: pd.Series,
-    X_val: pd.DataFrame,
-    y_val: pd.Series,
+    X_val: pd.DataFrame | None = None,
+    y_val: pd.Series | None = None,
     groups: pd.Series | np.ndarray | None = None,
     n_folds: int = 5,
     seed: int = SEED,
+    oof_strategy: str = "nested",
 ) -> tuple[np.ndarray, object]:
     """Return out-of-site OOF XGBoost predictions on train and the fitted final model.
 
     Each training record is predicted by a fold model trained exclusively on other
     monitoring stations (GroupKFold on 'Area').
+
+    Crucially, fold models NEVER use X_val / y_val for early stopping. Early stopping
+    is either performed using nested inner training folds within the outer training
+    slice (oof_strategy="nested") or disabled entirely (oof_strategy="none").
+    Validation data (X_val, y_val) is reserved exclusively for the final model
+    (final_xgb) and subsequent MLP early stopping / model evaluation.
 
     Returns
     -------
@@ -148,19 +155,64 @@ def _oof_xgb_predictions(
 
     for _, (trn_idx, oof_idx) in enumerate(folder.split(X_train, y_train, groups=groups_arr)):
         X_trn, y_trn = X_train.iloc[trn_idx], y_train.iloc[trn_idx]
+        groups_trn = groups_arr[trn_idx]
         X_oof = X_train.iloc[oof_idx]
 
-        X_trn_m, X_v_m, X_oof_m = match_categories(X_trn, X_val, X_oof)
-        model = build_xgb(XGB_PARAMS)
-        model.set_params(random_state=seed)
-        model.fit(X_trn_m, y_trn, eval_set=[(X_v_m, y_val)], verbose=False)
-        oof_preds[oof_idx] = model.predict(X_oof_m)
+        # Learn category codes strictly from the fold's training slice; align holdout to it.
+        X_trn_m, _, X_oof_m = match_categories(X_trn, X_trn, X_oof)
+        n_inner_groups = len(np.unique(groups_trn))
 
-    # Train final XGBoost on the complete training set (for inference on val/test)
-    X_tr_m, X_v_m, _ = match_categories(X_train, X_val, X_val)
-    final_xgb = build_xgb(XGB_PARAMS)
-    final_xgb.set_params(random_state=seed)
-    final_xgb.fit(X_tr_m, y_train, eval_set=[(X_v_m, y_val)], verbose=False)
+        if oof_strategy == "nested" and n_inner_groups >= 2:
+            inner_folds = min(5, n_inner_groups)
+            try:
+                inner_folder = GroupKFold(n_splits=inner_folds, shuffle=True, random_state=seed)
+            except TypeError:
+                inner_folder = GroupKFold(n_splits=inner_folds)
+
+            inner_trn_idx, inner_val_idx = next(
+                inner_folder.split(X_trn_m, y_trn, groups=groups_trn)
+            )
+            X_in_trn = X_trn_m.iloc[inner_trn_idx]
+            y_in_trn = y_trn.iloc[inner_trn_idx]
+            X_in_val = X_trn_m.iloc[inner_val_idx]
+            y_in_val = y_trn.iloc[inner_val_idx]
+
+            model = build_xgb(XGB_PARAMS)
+            model.set_params(random_state=seed)
+            model.fit(
+                X_in_trn,
+                y_in_trn,
+                eval_set=[(X_in_val, y_in_val)],
+                verbose=False,
+            )
+            oof_preds[oof_idx] = model.predict(X_oof_m)
+        else:
+            # No validation-based early stopping in OOF stage
+            model = build_xgb(XGB_PARAMS)
+            model.set_params(
+                random_state=seed,
+                early_stopping_rounds=None,
+                n_estimators=100,
+            )
+            model.fit(X_trn_m, y_trn, eval_set=None, verbose=False)
+            oof_preds[oof_idx] = model.predict(X_oof_m)
+
+    # Train final XGBoost on the complete training set (for inference on val/test).
+    # Validation data (X_val, y_val) is strictly used here for final model selection.
+    if X_val is not None and y_val is not None:
+        X_tr_m, X_v_m, _ = match_categories(X_train, X_val, X_val)
+        final_xgb = build_xgb(XGB_PARAMS)
+        final_xgb.set_params(random_state=seed)
+        final_xgb.fit(X_tr_m, y_train, eval_set=[(X_v_m, y_val)], verbose=False)
+    else:
+        X_tr_m, _, _ = match_categories(X_train, X_train, X_train)
+        final_xgb = build_xgb(XGB_PARAMS)
+        final_xgb.set_params(
+            random_state=seed,
+            early_stopping_rounds=None,
+            n_estimators=100,
+        )
+        final_xgb.fit(X_tr_m, y_train, eval_set=None, verbose=False)
 
     return oof_preds, final_xgb
 
@@ -295,6 +347,7 @@ def train_hybrid(
     save_reports: bool = True,
     output_path: Path | None = None,
     groups: pd.Series | np.ndarray | None = None,
+    oof_strategy: str = "nested",
     epochs: int = 15,
     batch_size: int = 512,
     lr: float = 1e-3,
@@ -320,6 +373,9 @@ def train_hybrid(
         Override default output CSV path.
     groups : pd.Series | None
         Monitoring station groups. Loaded automatically via _load_train_groups if None.
+    oof_strategy : {"nested", "none"}, default "nested"
+        OOF residual early-stopping strategy: nested inner training folds within each outer
+        fold (strictly zero validation leakage) or no early stopping in the OOF stage.
     epochs : int
         Max training epochs for the residual MLP.
     batch_size : int
@@ -373,6 +429,7 @@ def train_hybrid(
         groups=train_groups,
         n_folds=n_folds,
         seed=seed,
+        oof_strategy=oof_strategy,
     )
 
     # 3. XGBoost predictions on val and test
@@ -482,6 +539,7 @@ def train_hybrid(
             "n_train": len(X_train),
             "n_features": X_train.shape[1],
             "mlp_backend": "pytorch",
+            "oof_strategy": oof_strategy,
             "model_architecture": "WaterQualityMLP(128, 64, 32)",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
@@ -505,6 +563,7 @@ def run_ablation(
     n_seeds: int | None = None,
     subsample: int | None = 20000,
     output_path: Path | None = None,
+    oof_strategy: str = "nested",
 ) -> pd.DataFrame:
     """Run the 4-condition ablation scored strictly on the VALIDATION split.
 
@@ -637,6 +696,7 @@ def run_ablation(
             subsample=subsample,
             save_reports=False,
             groups=train_groups_full,
+            oof_strategy=oof_strategy,
             eval_test=False,
         )
         hyb_m = h_res["hybrid_val_metrics"]
@@ -795,6 +855,12 @@ def _parse_args():
         action="store_true",
         help="Run 4-condition ablation on validation split across agreed seeds",
     )
+    p.add_argument(
+        "--oof-strategy",
+        choices=["nested", "none"],
+        default="nested",
+        help="OOF residual early-stopping strategy: 'nested' inner folds or 'none' (default: nested)",
+    )
     p.add_argument("--no-report", action="store_true")
     return p.parse_args()
 
@@ -807,6 +873,7 @@ if __name__ == "__main__":
             partial_scenario=args.partial_scenario,
             n_seeds=args.seeds,
             subsample=args.subsample,
+            oof_strategy=args.oof_strategy,
         )
     else:
         res = train_hybrid(
@@ -816,6 +883,7 @@ if __name__ == "__main__":
             seed=SEED,
             subsample=args.subsample,
             save_reports=not args.no_report,
+            oof_strategy=args.oof_strategy,
             eval_test=True,
         )
         xm_v = res["xgb_val_metrics"]

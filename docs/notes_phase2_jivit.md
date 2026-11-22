@@ -19,7 +19,7 @@ neural network trained on its errors.
 
 **Key components:**
 
-1. **Out-of-fold XGBoost predictions with GroupKFold on Area** — the core anti-leakage design choice.  
+1. **Out-of-fold XGBoost predictions with GroupKFold on Area and Nested Inner Folds** — the core anti-leakage design choice.  
    In environmental monitoring datasets, water quality stations have many consecutive measurements
    over time (98.4% of training rows sit at sites with $\ge 10$ records). A standard `KFold(shuffle=True)`
    causes severe spatial autocorrelation leakage: fold models see samples from the same station on
@@ -31,8 +31,14 @@ neural network trained on its errors.
    To solve this, `_oof_xgb_predictions` uses `GroupKFold` grouped strictly by monitoring station (`Area`),
    passed through `src/split.py:get_train_groups()`. Every prediction comes from a model trained on
    completely unseen stations.
-   Furthermore, `_load_train_groups` fails fast with a descriptive `RuntimeError` on any index mismatch or
-   load failure rather than silently degrading to un-grouped KFold.
+   Furthermore:
+   - **Zero Validation Leakage Guarantee:** Fold models strictly NEVER use `X_val` / `y_val` as their `eval_set`.
+     Early stopping in the OOF stage uses **nested inner training folds** (`oof_strategy="nested"`) drawn strictly
+     from within the fold's training slice (`X_trn`), or no validation-based early stopping (`oof_strategy="none"`).
+     `X_val` / `y_val` is reserved exclusively for the final model (`final_xgb`) and MLP early stopping, leaving
+     the test split untouched.
+   - `_load_train_groups` fails fast with a descriptive `RuntimeError` on any index mismatch or
+     load failure rather than silently degrading to un-grouped KFold.
 
 2. **PyTorch WaterQualityMLP residual corrector** (`src/dl/model.py` and `src/dl/train.py`).  
    Integrated with the project's PyTorch `WaterQualityMLP` architecture:

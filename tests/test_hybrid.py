@@ -141,6 +141,128 @@ def test_oof_xgb_predictions_shape_and_leakage_contract():
 
 
 @pytest.mark.skipif(not HAS_XGB, reason="xgboost is not installed")
+def test_oof_xgb_predictions_independent_of_validation_labels():
+    """OOF fold models must never use validation labels for early stopping or fitting.
+
+    Drastically corrupting y_val must leave oof_preds completely unchanged.
+    """
+    X_train = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            "cat1": pd.Categorical(["a", "b", "a", "b", "a", "b", "a", "b"]),
+        }
+    )
+    y_train = pd.Series([10.0, 20.0, 15.0, 25.0, 12.0, 22.0, 18.0, 28.0])
+    X_val = pd.DataFrame(
+        {
+            "num1": [2.5, 3.5],
+            "cat1": pd.Categorical(["a", "b"]),
+        }
+    )
+    y_val_clean = pd.Series([18.0, 21.0])
+    y_val_corrupt = pd.Series([999999.0, -999999.0])
+    groups = pd.Series(["S1", "S1", "S2", "S2", "S3", "S3", "S4", "S4"])
+
+    # Nested strategy: early stopping on inner training folds
+    oof_nested_1, _ = hybrid._oof_xgb_predictions(
+        X_train,
+        y_train,
+        X_val,
+        y_val_clean,
+        groups=groups,
+        n_folds=2,
+        seed=42,
+        oof_strategy="nested",
+    )
+    oof_nested_2, _ = hybrid._oof_xgb_predictions(
+        X_train,
+        y_train,
+        X_val,
+        y_val_corrupt,
+        groups=groups,
+        n_folds=2,
+        seed=42,
+        oof_strategy="nested",
+    )
+    assert np.allclose(oof_nested_1, oof_nested_2, atol=1e-6)
+
+    # None strategy: no early stopping in OOF fold models
+    oof_none_1, _ = hybrid._oof_xgb_predictions(
+        X_train, y_train, X_val, y_val_clean, groups=groups, n_folds=2, seed=42, oof_strategy="none"
+    )
+    oof_none_2, _ = hybrid._oof_xgb_predictions(
+        X_train,
+        y_train,
+        X_val,
+        y_val_corrupt,
+        groups=groups,
+        n_folds=2,
+        seed=42,
+        oof_strategy="none",
+    )
+    assert np.allclose(oof_none_1, oof_none_2, atol=1e-6)
+
+
+@pytest.mark.skipif(not HAS_XGB, reason="xgboost is not installed")
+def test_oof_xgb_eval_set_never_receives_validation_data(monkeypatch):
+    """Spy on XGBRegressor.fit to guarantee eval_set in fold models contains zero validation rows."""
+    import xgboost as xgb
+
+    original_fit = xgb.XGBRegressor.fit
+    fit_calls = []
+
+    def spy_fit(self, X, y, *args, **kwargs):
+        eval_set = kwargs.get("eval_set")
+        fit_calls.append(
+            {
+                "n_train_rows": len(X),
+                "eval_set": eval_set,
+            }
+        )
+        return original_fit(self, X, y, *args, **kwargs)
+
+    monkeypatch.setattr(xgb.XGBRegressor, "fit", spy_fit)
+
+    X_train = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "cat1": pd.Categorical(["a", "b", "a", "b", "a", "b"]),
+        }
+    )
+    y_train = pd.Series([10.0, 20.0, 15.0, 25.0, 12.0, 22.0])
+    X_val = pd.DataFrame(
+        {
+            "num1": [999.0, 888.0],
+            "cat1": pd.Categorical(["a", "b"]),
+        }
+    )
+    y_val = pd.Series([777.0, 666.0])
+    groups = pd.Series(["S1", "S1", "S2", "S2", "S3", "S3"])
+
+    hybrid._oof_xgb_predictions(
+        X_train, y_train, X_val, y_val, groups=groups, n_folds=2, seed=42, oof_strategy="nested"
+    )
+
+    # Exactly 2 fold models + 1 final model = 3 fit calls
+    assert len(fit_calls) == 3
+
+    # Fold models must NEVER receive X_val or y_val in eval_set
+    for fold_call in fit_calls[:2]:
+        eval_set = fold_call["eval_set"]
+        if eval_set is not None:
+            for eval_x, eval_y in eval_set:
+                assert not np.isin(999.0, eval_x.to_numpy()).any()
+                assert not np.isin(777.0, np.asarray(eval_y)).any()
+
+    # The final model DOES receive (X_val, y_val) for final model selection
+    final_call = fit_calls[2]
+    assert final_call["eval_set"] is not None
+    eval_x, eval_y = final_call["eval_set"][0]
+    assert np.isin(999.0, eval_x.to_numpy()).any()
+    assert np.isin(777.0, np.asarray(eval_y)).any()
+
+
+@pytest.mark.skipif(not HAS_XGB, reason="xgboost is not installed")
 @requires_parquet_engine
 @requires_phase1_splits
 def test_train_hybrid_returns_metrics():
