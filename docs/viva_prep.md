@@ -174,6 +174,18 @@ seen.
 
 ---
 
+## 10. Phase 2 Calibration, Uncertainty & Explainability — *Satya*
+
+| Question | Answer sketch |
+| :--- | :--- |
+| How do you calibrate continuous regression predictions? | Via two complementary frameworks: (1) Conformal Prediction intervals and empirical coverage (PICP), and (2) Discretized Reliability Diagrams and Expected Calibration Error (ECE) across index bins. |
+| What is PICP and MPIW? | Prediction Interval Coverage Probability (PICP) is the share of true values that fall within $[\hat{y}_L, \hat{y}_U]$. Mean Prediction Interval Width (MPIW) measures sharpness. A good model achieves $\text{PICP} \ge 1 - \alpha$ with minimal MPIW. |
+| Why use Conformal Prediction instead of Gaussian intervals? | The target distribution has heavy tails and a massive spike at the ceiling ($y = 100$). Gaussian assumptions fail and under-cover. Conformal prediction provides distribution-free, finite-sample coverage guarantees calibrated on validation residuals. |
+| How does Monte Carlo Dropout work? | Keep dropout layers active at inference time while freezing batch-normalization layers in eval mode (`enable_dropout_only()`). Running $K=25$ stochastic passes samples from the approximate weight posterior, yielding predictive mean $\mu(x)$ and epistemic uncertainty $\sigma(x)$. |
+| Does the MLP agree with XGBoost feature attribution? | Yes. Permutation feature importance on the MLP shows Orthophosphate is by far the most influential feature, followed by Ammonia and BOD, mirroring XGBoost's Tree SHAP rankings. |
+
+---
+
 ## Questions we currently answer badly
 
 Be honest about these rather than bluffing. Examiners reward a known limitation over a confident evasion.
