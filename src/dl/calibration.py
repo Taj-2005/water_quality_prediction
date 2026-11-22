@@ -443,9 +443,7 @@ def prediction_intervals(
     }
 
 
-def continuous_model_metrics(
-    y_true: Iterable[float], y_pred: Iterable[float]
-) -> dict[str, float]:
+def continuous_model_metrics(y_true: Iterable[float], y_pred: Iterable[float]) -> dict[str, float]:
     """Return the shared project regression metrics for iterable inputs."""
     y = _to_numpy(y_true)
     pred = _to_numpy(y_pred)

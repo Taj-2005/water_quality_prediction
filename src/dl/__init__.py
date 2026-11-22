@@ -37,7 +37,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "enable_dropout_only": ("src.dl.calibration", "enable_dropout_only"),
     "monte_carlo_dropout_predict": ("src.dl.calibration", "monte_carlo_dropout_predict"),
     "mc_dropout_prediction_intervals": ("src.dl.calibration", "mc_dropout_prediction_intervals"),
-    "permutation_feature_importance_mlp": ("src.dl.calibration", "permutation_feature_importance_mlp"),
+    "permutation_feature_importance_mlp": (
+        "src.dl.calibration",
+        "permutation_feature_importance_mlp",
+    ),
     "reliability_diagram_data": ("src.dl.calibration", "reliability_diagram_data"),
     "expected_calibration_error": ("src.dl.calibration", "expected_calibration_error"),
     "category_calibration_summary": ("src.dl.calibration", "category_calibration_summary"),
