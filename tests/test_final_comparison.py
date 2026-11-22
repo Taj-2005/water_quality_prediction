@@ -27,8 +27,11 @@ from src.final_comparison import (  # noqa: E402
     RF_FIXED_PARAMS,
     TEAM_SEEDS,
     XGB_FIXED_PARAMS,
+    XGB_FIXED_PARAMS_BASE,
+    XGB_FIXED_PARAMS_TUNED,
     compute_error_breakdown_by_area,
     compute_error_breakdown_by_country,
+    compute_tail_metrics,
     run_naive_baseline,
     run_random_forest,
     run_tuned_mlp,
@@ -91,6 +94,18 @@ class TestBenchmarkConfiguration:
         assert XGB_FIXED_PARAMS["max_depth"] == 7
         assert pytest.approx(XGB_FIXED_PARAMS["learning_rate"], rel=1e-3) == 0.0552
         assert XGB_FIXED_PARAMS["min_child_weight"] == 30
+        assert pytest.approx(XGB_FIXED_PARAMS_TUNED["reg_lambda"], rel=1e-3) == 33.12
+        assert XGB_FIXED_PARAMS_BASE["max_depth"] == 8
+        assert XGB_FIXED_PARAMS_BASE["learning_rate"] == 0.1
+
+    def test_tail_metrics_calculation(self):
+        y_true = np.array([10.0, 20.0, 30.0, 40.0, 50.0])
+        y_pred = np.array([11.0, 20.5, 28.0, 45.0, 50.0])
+        # absolute errors: [1.0, 0.5, 2.0, 5.0, 0.0]
+        tail = compute_tail_metrics(y_true, y_pred)
+        assert tail["max_ae"] == 5.0
+        assert tail["p95_ae"] <= 5.0
+        assert tail["p95_ae"] >= 2.0
 
     def test_mlp_parameters_conforms_to_taj_and_himanshu(self):
         assert MLP_FIXED_CONFIG["hidden_dims"] == (256, 256, 256, 256)
@@ -107,7 +122,9 @@ class TestModelRunnersSynthetic:
         res = run_naive_baseline(y_tr, y_va, y_te, seed=42)
 
         assert res["n_params"] == 1
+        assert res["size (parameters or tree nodes)"] == 1
         assert "val_mae" in res and "test_mae" in res
+        assert "test_p95_ae" in res
         assert not np.isnan(res["test_rmse"])
         assert len(res["test_pred"]) == len(y_te)
         assert np.allclose(res["test_pred"], float(y_tr.mean()))
@@ -120,8 +137,9 @@ class TestModelRunnersSynthetic:
         )
 
         assert res["model"] == "Random Forest"
-        assert res["n_params"] > 0
+        assert res["size (parameters or tree nodes)"] > 0
         assert "test_rmse" in res
+        assert "test_p95_ae" in res
         assert not np.isnan(res["test_rmse"])
         assert len(res["test_pred"]) == len(y_te)
 
@@ -133,8 +151,9 @@ class TestModelRunnersSynthetic:
         )
 
         assert res["model"] == "XGBoost"
-        assert res["n_params"] > 0
+        assert res["size (parameters or tree nodes)"] > 0
         assert "test_mae" in res
+        assert "test_p95_ae" in res
         assert len(res["test_pred"]) == len(y_te)
 
     def test_tuned_mlp_executes_end_to_end(self):
@@ -149,7 +168,8 @@ class TestModelRunnersSynthetic:
         res = run_tuned_mlp(X_tr, y_tr, X_va, y_va, X_te, y_te, seed=42, cfg=fast_cfg)
 
         assert res["model"] == "Tuned MLP"
-        assert res["n_params"] > 0
+        assert res["size (parameters or tree nodes)"] > 0
+        assert "test_p95_ae" in res
         assert not np.isnan(res["test_rmse"])
         assert len(res["test_pred"]) == len(y_te)
 

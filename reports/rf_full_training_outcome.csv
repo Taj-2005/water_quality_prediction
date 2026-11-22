@@ -1,0 +1,2 @@
+status,n_train_samples,n_trees,max_depth,n_jobs,time_limit_s,train_time_s,total_time_s,error_message,test_rmse,test_mae,test_r2
+SUCCESS,1986397,100,15,-1,1200,52.41,56.53,,0.5830319824275271,0.26694085278662366,0.9990226881981622

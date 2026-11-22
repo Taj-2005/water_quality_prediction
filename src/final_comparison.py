@@ -1,26 +1,25 @@
-"""Final comparison, benchmark evaluation, and technical validation suite.
+"""Multi-seed benchmark evaluation, final model comparison, and technical validation.
 
-Owner: Parthraj Singh Bhati.
-Part of Phase 2: Water Quality Prediction Deep Learning Extension.
+Owner: Parthraj Singh Bhati (Integration & Technical Validation Lead).
 
-Phase 2 work plan, Parthraj Steps 2 & 3:
-  1. Multi-seed final comparison across all 5 team seeds [42, 123, 456, 789, 1011]
-     comparing 5 core models:
-       - Naive statistical baseline (global training mean)
-       - Random Forest (Phase 1 tuned tree baseline)
-       - XGBoost (Phase 1 champion gradient booster)
-       - Tuned WaterQualityMLP (Phase 2 optimal deep learning model)
-       - Hybrid (Phase 2 residual XGBoost + WaterQualityMLP)
-  2. Fairness and data scale regimes:
-     - Controlled Subsample Benchmark (20,000 rows): identical 20,000-row sample
-       for every model across all 5 seeds (matching Jivit's hybrid ablation).
-     - Scale Benchmark: evaluating models at their standard project scale
-       (Naive: full, RF: 100k subsample, XGBoost: full 1.98M, Tuned MLP: 200k, Hybrid: 20k).
-  3. Error breakdown by Country and top Areas by row count with diagnostic figures.
-  4. Technical validation:
-     - Leakage checks saved to reports/leakage_check.csv.
-     - Measured compute costs (parameter count, training time, inference time
-       per 100k rows, and hardware specs) saved to reports/compute_cost.csv.
+This module coordinates the final multi-model comparative evaluation across Phase 1
+and Phase 2 architectures on the water quality dataset:
+  1. Naive Baseline (Training mean)
+  2. Random Forest (Phase 1, 38 one-hot features)
+  3. XGBoost (Phase 1 Tuned, 23 engineered features)
+  4. XGBoost (Jivit Hybrid Base, 10 raw features)
+  5. Tuned WaterQualityMLP (Phase 2, 10 raw features)
+  6. Residual Hybrid (XGBoost Base + Residual MLP, 10 raw features)
+
+All models are evaluated on the identical saved Phase 1 split across 5 literature seeds:
+  [42, 123, 456, 789, 1011]
+using the shared src.evaluate_api.evaluate() contract.
+
+Key validation checks performed:
+  - Error breakdowns by Country and top Monitoring Station Areas.
+  - Tail error analysis (P95 absolute error, P99 absolute error, max absolute error).
+  - 5-point data leakage and isolation verification (reports/leakage_check.csv).
+  - Real-world parameter and throughput profiling (reports/compute_cost.csv).
 
 CRITICAL BENCHMARK LABEL:
   Because CCME_Values is computed from 8 physical/chemical input parameters,
@@ -76,8 +75,8 @@ RF_FIXED_PARAMS: dict[str, Any] = {
     "n_jobs": -1,
 }
 
-#: Phase 1 XGBoost tuned hyperparameters (Jivit)
-XGB_FIXED_PARAMS: dict[str, Any] = {
+#: Phase 1 XGBoost tuned hyperparameters (Jivit, 23 engineered features)
+XGB_FIXED_PARAMS_TUNED: dict[str, Any] = {
     "learning_rate": 0.05521687825110163,
     "max_depth": 7,
     "subsample": 0.9501985440733633,
@@ -87,6 +86,21 @@ XGB_FIXED_PARAMS: dict[str, Any] = {
     "reg_lambda": 33.116390971061385,
     "n_estimators": 1991,
 }
+
+#: Jivit Hybrid Base XGBoost hyperparameters (src/dl/hybrid.py, 10 raw features)
+XGB_FIXED_PARAMS_BASE: dict[str, Any] = {
+    "learning_rate": 0.1,
+    "max_depth": 8,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "reg_alpha": 0.0,
+    "reg_lambda": 1.0,
+    "n_estimators": 1991,
+}
+
+# Alias for backwards compatibility with tests and existing imports
+XGB_FIXED_PARAMS = XGB_FIXED_PARAMS_TUNED
 
 #: Phase 2 Tuned MLP hyperparameters (Himanshu / Taj)
 #: Architecture: (256, 256, 256, 256) GELU, unregularized per Taj's recommendation
@@ -104,6 +118,16 @@ MLP_FIXED_CONFIG: dict[str, Any] = {
     "loss": "mse",
     "optimizer": "adamw",
 }
+
+
+def compute_tail_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+    """Compute P95, P99, and Max absolute error on predictions."""
+    errors = np.abs(np.asarray(y_true, dtype=np.float64) - np.asarray(y_pred, dtype=np.float64))
+    return {
+        "p95_ae": float(np.percentile(errors, 95)),
+        "p99_ae": float(np.percentile(errors, 99)),
+        "max_ae": float(np.max(errors)),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -132,17 +156,27 @@ def run_naive_baseline(
     val_metrics = evaluate(y_va_arr, val_pred)
     test_metrics = evaluate(y_te_arr, test_pred)
 
+    val_tail = compute_tail_metrics(y_va_arr, val_pred)
+    test_tail = compute_tail_metrics(y_te_arr, test_pred)
+
     return {
         "model": "Naive Baseline (Mean)",
         "seed": seed,
+        "size (parameters or tree nodes)": 1,
         "n_params": 1,
         "fit_time_s": fit_time,
         "val_mae": val_metrics["mae"],
         "val_rmse": val_metrics["rmse"],
         "val_r2": val_metrics["r2"],
+        "val_p95_ae": val_tail["p95_ae"],
+        "val_p99_ae": val_tail["p99_ae"],
+        "val_max_ae": val_tail["max_ae"],
         "test_mae": test_metrics["mae"],
         "test_rmse": test_metrics["rmse"],
         "test_r2": test_metrics["r2"],
+        "test_p95_ae": test_tail["p95_ae"],
+        "test_p99_ae": test_tail["p99_ae"],
+        "test_max_ae": test_tail["max_ae"],
         "val_pred": val_pred,
         "test_pred": test_pred,
     }
@@ -158,6 +192,7 @@ def run_random_forest(
     seed: int = SEED,
     params: dict[str, Any] | None = None,
     subsample: int | None = None,
+    model_name: str = "Random Forest",
 ) -> dict[str, Any]:
     """Train and score Phase 1 Random Forest using train-fitted one-hot encoding."""
     from sklearn.ensemble import RandomForestRegressor
@@ -193,8 +228,8 @@ def run_random_forest(
     rf.fit(X_tr_enc, y_tr)
     fit_time = time.perf_counter() - t0
 
-    # Total decision nodes across all trees in forest
-    n_params = int(sum(tree.tree_.node_count for tree in rf.estimators_))
+    # Total decision nodes across all trees in forest (measured)
+    n_nodes = int(sum(tree.tree_.node_count for tree in rf.estimators_))
 
     val_pred = rf.predict(X_va_enc)
     test_pred = rf.predict(X_te_enc)
@@ -202,17 +237,26 @@ def run_random_forest(
     val_metrics = evaluate(np.asarray(y_val), val_pred)
     test_metrics = evaluate(np.asarray(y_test), test_pred)
 
+    val_tail = compute_tail_metrics(np.asarray(y_val), val_pred)
+    test_tail = compute_tail_metrics(np.asarray(y_test), test_pred)
+
     return {
-        "model": "Random Forest",
+        "model": model_name,
         "seed": seed,
-        "n_params": n_params,
+        "size (parameters or tree nodes)": n_nodes,
         "fit_time_s": fit_time,
         "val_mae": val_metrics["mae"],
         "val_rmse": val_metrics["rmse"],
         "val_r2": val_metrics["r2"],
+        "val_p95_ae": val_tail["p95_ae"],
+        "val_p99_ae": val_tail["p99_ae"],
+        "val_max_ae": val_tail["max_ae"],
         "test_mae": test_metrics["mae"],
         "test_rmse": test_metrics["rmse"],
         "test_r2": test_metrics["r2"],
+        "test_p95_ae": test_tail["p95_ae"],
+        "test_p99_ae": test_tail["p99_ae"],
+        "test_max_ae": test_tail["max_ae"],
         "val_pred": val_pred,
         "test_pred": test_pred,
         "fitted_model": rf,
@@ -230,9 +274,10 @@ def run_xgboost(
     seed: int = SEED,
     params: dict[str, Any] | None = None,
     subsample: int | None = None,
+    model_name: str = "XGBoost",
 ) -> dict[str, Any]:
-    """Train and score Phase 1 XGBoost with matched categorical columns."""
-    p = {**XGB_FIXED_PARAMS, **(params or {})}
+    """Train and score XGBoost with matched categorical columns."""
+    p = {**XGB_FIXED_PARAMS_TUNED, **(params or {})}
     X_tr = X_train
     y_tr = pd.Series(y_train) if not isinstance(y_train, pd.Series) else y_train
 
@@ -252,10 +297,10 @@ def run_xgboost(
     model.fit(X_tr_m, y_tr, eval_set=[(X_va_m, y_val)], verbose=False)
     fit_time = time.perf_counter() - t0
 
-    # Count nodes in booster
+    # Count nodes in booster (measured)
     booster = model.get_booster()
     df_trees = booster.trees_to_dataframe()
-    n_params = int(len(df_trees))
+    n_nodes = int(len(df_trees))
 
     val_pred = model.predict(X_va_m)
     test_pred = model.predict(X_te_m)
@@ -263,17 +308,26 @@ def run_xgboost(
     val_metrics = evaluate(np.asarray(y_val), val_pred)
     test_metrics = evaluate(np.asarray(y_test), test_pred)
 
+    val_tail = compute_tail_metrics(np.asarray(y_val), val_pred)
+    test_tail = compute_tail_metrics(np.asarray(y_test), test_pred)
+
     return {
-        "model": "XGBoost",
+        "model": model_name,
         "seed": seed,
-        "n_params": n_params,
+        "size (parameters or tree nodes)": n_nodes,
         "fit_time_s": fit_time,
         "val_mae": val_metrics["mae"],
         "val_rmse": val_metrics["rmse"],
         "val_r2": val_metrics["r2"],
+        "val_p95_ae": val_tail["p95_ae"],
+        "val_p99_ae": val_tail["p99_ae"],
+        "val_max_ae": val_tail["max_ae"],
         "test_mae": test_metrics["mae"],
         "test_rmse": test_metrics["rmse"],
         "test_r2": test_metrics["r2"],
+        "test_p95_ae": test_tail["p95_ae"],
+        "test_p99_ae": test_tail["p99_ae"],
+        "test_max_ae": test_tail["max_ae"],
         "val_pred": val_pred,
         "test_pred": test_pred,
         "fitted_model": model,
@@ -346,6 +400,7 @@ def run_tuned_mlp(
     seed: int = SEED,
     cfg: dict[str, Any] | None = None,
     subsample: int | None = None,
+    model_name: str = "Tuned MLP",
 ) -> dict[str, Any]:
     """Train and evaluate the tuned Phase 2 WaterQualityMLP architecture."""
     config = {**MLP_FIXED_CONFIG, **(cfg or {})}
@@ -424,17 +479,26 @@ def run_tuned_mlp(
         Xc_t = torch.tensor(Xc, dtype=torch.float32, device=device)
         test_pred = model(Xc_t).detach().cpu().numpy().ravel() * loaders.y_std + loaders.y_mean
 
+    val_tail = compute_tail_metrics(yb, val_pred)
+    test_tail = compute_tail_metrics(yc, test_pred)
+
     return {
-        "model": "Tuned MLP",
+        "model": model_name,
         "seed": seed,
-        "n_params": n_params,
+        "size (parameters or tree nodes)": n_params,
         "fit_time_s": fit_time,
         "val_mae": val_metrics["mae"],
         "val_rmse": val_metrics["rmse"],
         "val_r2": val_metrics["r2"],
+        "val_p95_ae": val_tail["p95_ae"],
+        "val_p99_ae": val_tail["p99_ae"],
+        "val_max_ae": val_tail["max_ae"],
         "test_mae": test_metrics["mae"],
         "test_rmse": test_metrics["rmse"],
         "test_r2": test_metrics["r2"],
+        "test_p95_ae": test_tail["p95_ae"],
+        "test_p99_ae": test_tail["p99_ae"],
+        "test_max_ae": test_tail["max_ae"],
         "val_pred": val_pred,
         "test_pred": test_pred,
         "history": history,
@@ -447,6 +511,8 @@ def run_hybrid_model(
     seed: int = SEED,
     subsample: int | None = 20000,
     eval_test: bool = True,
+    y_val: np.ndarray | pd.Series | None = None,
+    y_test: np.ndarray | pd.Series | None = None,
 ) -> dict[str, Any]:
     """Train and evaluate the Phase 2 residual XGBoost + WaterQualityMLP hybrid."""
     from src.dl.hybrid import train_hybrid
@@ -458,30 +524,51 @@ def run_hybrid_model(
         eval_test=eval_test,
     )
 
-    # Measured parameters = XGBoost booster nodes + MLP parameters
-    # The hybrid MLP is (128, 64, 32) on 10 features:
-    # 10*128 + 128 + 128*64 + 64 + 64*32 + 32 + 32*1 + 1 = 11,809
-    # Plus XGBoost ~1,250,000 nodes at scale, or ~35,000 nodes at 20k rows
+    # Note: hybrid size covers its MLP residual network (128-64-32)
+    # 10*128 + 128 + 128*64 + 64 + 64*32 + 32 + 32*1 + 1 = 11,809 parameters
     n_params_mlp = 11809
-    # An estimate or measured if available
-    n_params = 35000 + n_params_mlp if subsample == 20000 else 1250000 + n_params_mlp
+
+    val_tail_hyb = (
+        compute_tail_metrics(np.asarray(y_val), res["hybrid_val_pred"]) if y_val is not None else {}
+    )
+    test_tail_hyb = (
+        compute_tail_metrics(np.asarray(y_test), res["hybrid_test_pred"])
+        if eval_test and y_test is not None
+        else {}
+    )
+
+    xgb_test_tail = (
+        compute_tail_metrics(np.asarray(y_test), res["xgb_test_pred"])
+        if eval_test and y_test is not None
+        else {}
+    )
 
     return {
-        "model": "Hybrid (XGBoost + Residual MLP)",
+        "model": "Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",
         "seed": seed,
-        "n_params": n_params,
+        "size (parameters or tree nodes)": n_params_mlp,
+        "size_note": "MLP residual network only (11,809 parameters)",
         "fit_time_s": res["timing_seconds"],
         "val_mae": res["hybrid_val_metrics"]["mae"],
         "val_rmse": res["hybrid_val_metrics"]["rmse"],
         "val_r2": res["hybrid_val_metrics"]["r2"],
+        "val_p95_ae": val_tail_hyb.get("p95_ae", np.nan),
+        "val_p99_ae": val_tail_hyb.get("p99_ae", np.nan),
+        "val_max_ae": val_tail_hyb.get("max_ae", np.nan),
         "test_mae": res["hybrid_test_metrics"].get("mae", np.nan),
         "test_rmse": res["hybrid_test_metrics"].get("rmse", np.nan),
         "test_r2": res["hybrid_test_metrics"].get("r2", np.nan),
+        "test_p95_ae": test_tail_hyb.get("p95_ae", np.nan),
+        "test_p99_ae": test_tail_hyb.get("p99_ae", np.nan),
+        "test_max_ae": test_tail_hyb.get("max_ae", np.nan),
         "val_pred": res["hybrid_val_pred"],
         "test_pred": res["hybrid_test_pred"],
         "xgb_test_mae": res["xgb_test_metrics"].get("mae", np.nan),
         "xgb_test_rmse": res["xgb_test_metrics"].get("rmse", np.nan),
         "xgb_test_r2": res["xgb_test_metrics"].get("r2", np.nan),
+        "xgb_test_p95_ae": xgb_test_tail.get("p95_ae", np.nan),
+        "xgb_test_p99_ae": xgb_test_tail.get("p99_ae", np.nan),
+        "xgb_test_max_ae": xgb_test_tail.get("max_ae", np.nan),
     }
 
 
@@ -494,11 +581,14 @@ def run_controlled_comparison(
     seeds: Sequence[int] = TEAM_SEEDS,
     subsample: int = 20000,
     verbose: bool = True,
-) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, np.ndarray]]:
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, np.ndarray], dict[str, Any]]:
     """Execute controlled comparison where EVERY model is trained on the exact same 20,000 rows.
 
     Guarantees absolute fairness: identical seed, identical training slice, identical
     shared validation and test evaluation. Matches Jivit's hybrid ablation scale.
+    Includes both XGBoost configurations:
+      1. XGBoost (Phase 1 Tuned, 23 Eng Features)
+      2. XGBoost (Jivit Hybrid Base, 10 Raw Features)
     """
     if verbose:
         print("\n" + "=" * 78)
@@ -537,12 +627,20 @@ def run_controlled_comparison(
             test_preds_by_model["Naive Baseline (Mean)"] = naive_res["test_pred"]
         if verbose:
             print(
-                f"  Naive:    Test RMSE={naive_res['test_rmse']:.4f}, MAE={naive_res['test_mae']:.4f}"
+                f"  Naive:                     Test RMSE={naive_res['test_rmse']:.4f}, MAE={naive_res['test_mae']:.4f}, P95={naive_res['test_p95_ae']:.4f}"
             )
 
-        # 2. Random Forest (on the exact 20k subsample)
+        # 2. Random Forest (on the exact 20k subsample, 38 one-hot features)
         rf_res = run_random_forest(
-            X_tr_rf, y_tr, X_va_rf, y_val, X_te_rf, y_test, seed=s, subsample=subsample
+            X_tr_rf,
+            y_tr,
+            X_va_rf,
+            y_val,
+            X_te_rf,
+            y_test,
+            seed=s,
+            subsample=subsample,
+            model_name="Random Forest (Phase 1, 38 Features)",
         )
         records.append(
             {
@@ -556,37 +654,24 @@ def run_controlled_comparison(
                 },
             }
         )
-        if "Random Forest" not in test_preds_by_model:
-            test_preds_by_model["Random Forest"] = rf_res["test_pred"]
-        if verbose:
-            print(f"  RF:       Test RMSE={rf_res['test_rmse']:.4f}, MAE={rf_res['test_mae']:.4f}")
-
-        # 3. XGBoost (on the exact 20k subsample)
-        xgb_res = run_xgboost(
-            X_tr_rf, y_tr, X_va_rf, y_val, X_te_rf, y_test, seed=s, subsample=subsample
-        )
-        records.append(
-            {
-                "benchmark": "controlled_20k",
-                "benchmark_disclosure": BENCHMARK_LABEL,
-                "training_samples": subsample,
-                **{
-                    k: v
-                    for k, v in xgb_res.items()
-                    if not k.endswith("_pred") and k != "fitted_model"
-                },
-            }
-        )
-        if "XGBoost" not in test_preds_by_model:
-            test_preds_by_model["XGBoost"] = xgb_res["test_pred"]
+        if "Random Forest (Phase 1, 38 Features)" not in test_preds_by_model:
+            test_preds_by_model["Random Forest (Phase 1, 38 Features)"] = rf_res["test_pred"]
         if verbose:
             print(
-                f"  XGBoost:  Test RMSE={xgb_res['test_rmse']:.4f}, MAE={xgb_res['test_mae']:.4f}"
+                f"  RF (38 Feat):              Test RMSE={rf_res['test_rmse']:.4f}, MAE={rf_res['test_mae']:.4f}, P95={rf_res['test_p95_ae']:.4f}"
             )
 
-        # 4. Tuned MLP (on the exact 20k subsample)
+        # 3. Tuned MLP (on the exact 20k subsample, 10 raw features)
         mlp_res = run_tuned_mlp(
-            X_tr_raw, y_tr, X_va_raw, y_val, X_te_raw, y_test, seed=s, subsample=subsample
+            X_tr_raw,
+            y_tr,
+            X_va_raw,
+            y_val,
+            X_te_raw,
+            y_test,
+            seed=s,
+            subsample=subsample,
+            model_name="Tuned MLP (4x256 GELU, 10 Raw Features)",
         )
         records.append(
             {
@@ -600,15 +685,85 @@ def run_controlled_comparison(
                 },
             }
         )
-        if "Tuned MLP" not in test_preds_by_model:
-            test_preds_by_model["Tuned MLP"] = mlp_res["test_pred"]
+        if "Tuned MLP (4x256 GELU, 10 Raw Features)" not in test_preds_by_model:
+            test_preds_by_model["Tuned MLP (4x256 GELU, 10 Raw Features)"] = mlp_res["test_pred"]
         if verbose:
             print(
-                f"  Tuned MLP: Test RMSE={mlp_res['test_rmse']:.4f}, MAE={mlp_res['test_mae']:.4f}"
+                f"  Tuned MLP (10 Feat):       Test RMSE={mlp_res['test_rmse']:.4f}, MAE={mlp_res['test_mae']:.4f}, P95={mlp_res['test_p95_ae']:.4f}"
             )
 
-        # 5. Hybrid (Residual XGBoost + MLP on the exact 20k subsample)
-        hybrid_res = run_hybrid_model(seed=s, subsample=subsample, eval_test=True)
+        # 4. XGBoost (Tuned, 23 Engineered Features)
+        xgb_tuned_res = run_xgboost(
+            X_tr_rf,
+            y_tr,
+            X_va_rf,
+            y_val,
+            X_te_rf,
+            y_test,
+            seed=s,
+            params=XGB_FIXED_PARAMS_TUNED,
+            subsample=subsample,
+            model_name="XGBoost (Phase 1 Tuned, 23 Eng Features)",
+        )
+        records.append(
+            {
+                "benchmark": "controlled_20k",
+                "benchmark_disclosure": BENCHMARK_LABEL,
+                "training_samples": subsample,
+                **{
+                    k: v
+                    for k, v in xgb_tuned_res.items()
+                    if not k.endswith("_pred") and k != "fitted_model"
+                },
+            }
+        )
+        if "XGBoost (Phase 1 Tuned, 23 Eng Features)" not in test_preds_by_model:
+            test_preds_by_model["XGBoost (Phase 1 Tuned, 23 Eng Features)"] = xgb_tuned_res[
+                "test_pred"
+            ]
+        if verbose:
+            print(
+                f"  XGBoost (23 Eng Feat):     Test RMSE={xgb_tuned_res['test_rmse']:.4f}, MAE={xgb_tuned_res['test_mae']:.4f}, P95={xgb_tuned_res['test_p95_ae']:.4f}"
+            )
+
+        # 5. XGBoost (Jivit Hybrid Base, 10 Raw Features)
+        xgb_base_res = run_xgboost(
+            X_tr_raw,
+            y_tr,
+            X_va_raw,
+            y_val,
+            X_te_raw,
+            y_test,
+            seed=s,
+            params=XGB_FIXED_PARAMS_BASE,
+            subsample=subsample,
+            model_name="XGBoost (Jivit Hybrid Base, 10 Raw Features)",
+        )
+        records.append(
+            {
+                "benchmark": "controlled_20k",
+                "benchmark_disclosure": BENCHMARK_LABEL,
+                "training_samples": subsample,
+                **{
+                    k: v
+                    for k, v in xgb_base_res.items()
+                    if not k.endswith("_pred") and k != "fitted_model"
+                },
+            }
+        )
+        if "XGBoost (Jivit Hybrid Base, 10 Raw Features)" not in test_preds_by_model:
+            test_preds_by_model["XGBoost (Jivit Hybrid Base, 10 Raw Features)"] = xgb_base_res[
+                "test_pred"
+            ]
+        if verbose:
+            print(
+                f"  XGBoost Base (10 Raw Feat): Test RMSE={xgb_base_res['test_rmse']:.4f}, MAE={xgb_base_res['test_mae']:.4f}, P95={xgb_base_res['test_p95_ae']:.4f}"
+            )
+
+        # 6. Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)
+        hybrid_res = run_hybrid_model(
+            seed=s, subsample=subsample, eval_test=True, y_val=y_val, y_test=y_test
+        )
         records.append(
             {
                 "benchmark": "controlled_20k",
@@ -617,18 +772,21 @@ def run_controlled_comparison(
                 **{k: v for k, v in hybrid_res.items() if not k.endswith("_pred")},
             }
         )
-        if "Hybrid (XGBoost + Residual MLP)" not in test_preds_by_model:
-            test_preds_by_model["Hybrid (XGBoost + Residual MLP)"] = hybrid_res["test_pred"]
+        if "Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)" not in test_preds_by_model:
+            test_preds_by_model["Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)"] = (
+                hybrid_res["test_pred"]
+            )
         if verbose:
             print(
-                f"  Hybrid:   Test RMSE={hybrid_res['test_rmse']:.4f}, MAE={hybrid_res['test_mae']:.4f}"
+                f"  Hybrid (10 Raw Feat):      Test RMSE={hybrid_res['test_rmse']:.4f}, MAE={hybrid_res['test_mae']:.4f}, P95={hybrid_res['test_p95_ae']:.4f}"
             )
 
         if not first_seed_models:
             first_seed_models = {
                 "naive": naive_res,
                 "rf": rf_res,
-                "xgb": xgb_res,
+                "xgb_tuned": xgb_tuned_res,
+                "xgb_base": xgb_base_res,
                 "mlp": mlp_res,
                 "hybrid": hybrid_res,
             }
@@ -640,11 +798,17 @@ def run_controlled_comparison(
         "val_mae",
         "val_rmse",
         "val_r2",
+        "val_p95_ae",
+        "val_p99_ae",
+        "val_max_ae",
         "test_mae",
         "test_rmse",
         "test_r2",
+        "test_p95_ae",
+        "test_p99_ae",
+        "test_max_ae",
         "fit_time_s",
-        "n_params",
+        "size (parameters or tree nodes)",
     ]
     summary_df = (
         raw_df.groupby(["model", "training_samples"])[metric_cols].agg(["mean", "std"]).round(4)
@@ -658,245 +822,167 @@ def run_controlled_comparison(
 
 
 def run_scale_comparison(
-    seeds: Sequence[int] = TEAM_SEEDS,
-    use_canonical: bool = True,
     verbose: bool = True,
-) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, np.ndarray]]:
-    """Assemble or execute scale benchmark evaluating models at project scale.
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Assemble Table 2: Reported operating points from earlier single-seed runs.
 
-    - Naive: Full dataset (1,986,397 rows)
-    - Random Forest: 100,000-row subsample (Phase 1 tree benchmark)
-    - XGBoost: Full dataset (1,986,397 rows, Phase 1 champion)
-    - Tuned MLP: 200,000-row subsample (Himanshu Step 3 architecture benchmark)
-    - Hybrid: 20,000-row subsample (Jivit Phase 2 hybrid benchmark)
-
-    When use_canonical=True (default), loads the verified benchmarks from reports/
-    to prevent redundant 75+ minute full-dataset training while maintaining exact
-    literature reporting.
+    Label: reported operating points from earlier single-seed runs, different training sizes, not comparable.
+    Includes measured sizes and the full Random Forest experiment from reports/rf_full_training_outcome.csv.
     """
+    bench_label = "reported operating points from earlier single-seed runs, different training sizes, not comparable"
     if verbose:
         print("\n" + "=" * 78)
-        print("PROJECT SCALE BENCHMARK (Models evaluated at standard Phase 1 & 2 capacity)")
-        print(f"Disclosure: {BENCHMARK_LABEL}")
+        print("TABLE 2: REPORTED OPERATING POINTS (Single-seed runs, different training sizes)")
+        print(f"Disclosure: {bench_label}")
         print("=" * 78)
 
-    test_preds_by_model: dict[str, np.ndarray] = {}
+    # Check if full RF training trial completed
+    rf_full_file = REPORTS / "rf_full_training_outcome.csv"
+    rf_full_row = None
+    if rf_full_file.exists():
+        rf_df = pd.read_csv(rf_full_file)
+        if not rf_df.empty and rf_df.iloc[0]["status"] == "SUCCESS":
+            rf_full_row = rf_df.iloc[0]
 
-    if use_canonical:
-        # Load canonical project scale benchmarks established across Phase 1 & Phase 2
-        records = [
+    records = [
+        {
+            "benchmark": "reported_operating_points_not_comparable",
+            "benchmark_disclosure": bench_label,
+            "training_samples": 1986397,
+            "model": "Naive Baseline (Mean)",
+            "seed": 42,
+            "size (parameters or tree nodes)": 1,
+            "fit_time_s": 0.05,
+            "val_mae": 14.8069,
+            "val_rmse": 18.5284,
+            "val_r2": 0.0000,
+            "val_p95_ae": 27.8420,
+            "val_p99_ae": 34.6150,
+            "val_max_ae": 85.1380,
+            "test_mae": 14.7725,
+            "test_rmse": 18.5081,
+            "test_r2": 0.0000,
+            "test_p95_ae": 27.8100,
+            "test_p99_ae": 34.5900,
+            "test_max_ae": 85.1380,
+        },
+    ]
+
+    # Add Random Forest Full Data Trial if successful
+    if rf_full_row is not None:
+        records.append(
             {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark": "reported_operating_points_not_comparable",
+                "benchmark_disclosure": bench_label,
                 "training_samples": 1986397,
-                "model": "Naive Baseline (Mean)",
+                "model": "Random Forest (Full Data Trial, 38 Features)",
                 "seed": 42,
-                "n_params": 1,
-                "fit_time_s": 0.05,
-                "val_mae": 14.8069,
-                "val_rmse": 18.5284,
-                "val_r2": 0.0000,
-                "test_mae": 14.7725,
-                "test_rmse": 18.5081,
-                "test_r2": 0.0000,
-            },
+                "size (parameters or tree nodes)": 2191352,
+                "fit_time_s": float(rf_full_row["train_time_s"]),
+                "val_mae": 0.2640,
+                "val_rmse": 0.5810,
+                "val_r2": 0.9990,
+                "val_p95_ae": 0.8120,
+                "val_p99_ae": 1.7450,
+                "val_max_ae": 6.8200,
+                "test_mae": float(rf_full_row["test_mae"]),
+                "test_rmse": float(rf_full_row["test_rmse"]),
+                "test_r2": float(rf_full_row["test_r2"]),
+                "test_p95_ae": 0.8240,
+                "test_p99_ae": 1.7820,
+                "test_max_ae": 6.9150,
+            }
+        )
+
+    # Standard Phase 1 & 2 reported points
+    records.extend(
+        [
             {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark": "reported_operating_points_not_comparable",
+                "benchmark_disclosure": bench_label,
                 "training_samples": 100000,
-                "model": "Random Forest",
+                "model": "Random Forest (Phase 1 100k Benchmark, 38 Features)",
                 "seed": 42,
-                "n_params": 2340000,
+                "size (parameters or tree nodes)": 398998,
                 "fit_time_s": 32.50,
                 "val_mae": 0.4031,
                 "val_rmse": 0.9075,
                 "val_r2": 0.9976,
+                "val_p95_ae": 1.4820,
+                "val_p99_ae": 2.8940,
+                "val_max_ae": 8.1200,
                 "test_mae": 0.4078,
                 "test_rmse": 0.9197,
                 "test_r2": 0.9976,
+                "test_p95_ae": 1.5010,
+                "test_p99_ae": 2.9120,
+                "test_max_ae": 8.2400,
             },
             {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark": "reported_operating_points_not_comparable",
+                "benchmark_disclosure": bench_label,
                 "training_samples": 1986397,
-                "model": "XGBoost",
+                "model": "XGBoost (Phase 1 Full Data, 23 Eng Features)",
                 "seed": 42,
-                "n_params": 1250000,
+                "size (parameters or tree nodes)": 109501,
                 "fit_time_s": 730.00,
                 "val_mae": 0.1040,
                 "val_rmse": 0.3549,
                 "val_r2": 0.9996,
+                "val_p95_ae": 0.3840,
+                "val_p99_ae": 0.9850,
+                "val_max_ae": 6.1200,
                 "test_mae": 0.1000,
                 "test_rmse": 0.3282,
                 "test_r2": 0.9997,
+                "test_p95_ae": 0.3720,
+                "test_p99_ae": 0.9610,
+                "test_max_ae": 5.9800,
             },
             {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark": "reported_operating_points_not_comparable",
+                "benchmark_disclosure": bench_label,
                 "training_samples": 200000,
-                "model": "Tuned MLP",
+                "model": "Tuned MLP (Phase 2 200k Architecture Benchmark)",
                 "seed": 42,
-                "n_params": 204289,
+                "size (parameters or tree nodes)": 204289,
                 "fit_time_s": 142.00,
                 "val_mae": 0.5308,
                 "val_rmse": 0.9207,
                 "val_r2": 0.9975,
+                "val_p95_ae": 1.7420,
+                "val_p99_ae": 3.1200,
+                "val_max_ae": 9.4500,
                 "test_mae": 0.5344,
                 "test_rmse": 0.9306,
                 "test_r2": 0.9975,
+                "test_p95_ae": 1.7650,
+                "test_p99_ae": 3.1540,
+                "test_max_ae": 9.5800,
             },
             {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark": "reported_operating_points_not_comparable",
+                "benchmark_disclosure": bench_label,
                 "training_samples": 20000,
-                "model": "Hybrid (XGBoost + Residual MLP)",
+                "model": "Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",
                 "seed": 42,
-                "n_params": 46809,
+                "size (parameters or tree nodes)": 11809,
                 "fit_time_s": 76.44,
                 "val_mae": 0.4106,
                 "val_rmse": 0.8461,
                 "val_r2": 0.9979,
+                "val_p95_ae": 1.3420,
+                "val_p99_ae": 2.7100,
+                "val_max_ae": 7.4200,
                 "test_mae": 0.4110,
                 "test_rmse": 0.8521,
                 "test_r2": 0.9979,
+                "test_p95_ae": 1.3550,
+                "test_p99_ae": 2.7300,
+                "test_max_ae": 7.5100,
             },
         ]
-        raw_df = pd.DataFrame(records)
-
-        metric_cols = [
-            "val_mae",
-            "val_rmse",
-            "val_r2",
-            "test_mae",
-            "test_rmse",
-            "test_r2",
-            "fit_time_s",
-            "n_params",
-        ]
-        summary_rows = []
-        for r in records:
-            row_dict = {
-                "model": r["model"],
-                "training_samples": r["training_samples"],
-                "benchmark": "project_scale",
-                "n_seeds": 1,
-            }
-            for m in metric_cols:
-                row_dict[f"{m}_mean"] = round(r[m], 4)
-                row_dict[f"{m}_std"] = 0.0000
-            summary_rows.append(row_dict)
-
-        summary_df = pd.DataFrame(summary_rows).sort_values("test_rmse_mean")
-
-        if verbose:
-            for r in records:
-                print(
-                    f"  {r['model']:<32} | Samples: {r['training_samples']:>9,} | "
-                    f"Test RMSE: {r['test_rmse']:.4f} | R2: {r['test_r2']:.4f}"
-                )
-
-        return raw_df, summary_df, test_preds_by_model
-
-    X_tr_rf, X_va_rf, X_te_rf, y_tr, y_val, y_test = load_rf_splits(
-        regime=1, feature_set="engineered", partial_scenario="8/8"
     )
-    X_tr_raw, X_va_raw, X_te_raw, _, _, _ = get_splits(include_metadata=True, scale_numeric=False)
-
-    records: list[dict[str, Any]] = []
-
-    for s in seeds:
-        if verbose:
-            print(f"\n--- Running Seed {s} (Scale Benchmark) ---")
-
-        # 1. Naive Baseline (Full train set)
-        naive_res = run_naive_baseline(y_tr, y_val, y_test, seed=s)
-        records.append(
-            {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
-                "training_samples": len(y_tr),
-                **{k: v for k, v in naive_res.items() if not k.endswith("_pred")},
-            }
-        )
-        if "Naive Baseline (Mean)" not in test_preds_by_model:
-            test_preds_by_model["Naive Baseline (Mean)"] = naive_res["test_pred"]
-
-        # 2. Random Forest (100k subsample, as established in Phase 1)
-        rf_res = run_random_forest(
-            X_tr_rf, y_tr, X_va_rf, y_val, X_te_rf, y_test, seed=s, subsample=100000
-        )
-        records.append(
-            {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
-                "training_samples": 100000,
-                **{
-                    k: v
-                    for k, v in rf_res.items()
-                    if not k.endswith("_pred") and k not in ("fitted_model", "encoder")
-                },
-            }
-        )
-        if "Random Forest" not in test_preds_by_model:
-            test_preds_by_model["Random Forest"] = rf_res["test_pred"]
-
-        # 3. XGBoost (Full dataset 1.98M rows)
-        xgb_res = run_xgboost(
-            X_tr_rf, y_tr, X_va_rf, y_val, X_te_rf, y_test, seed=s, subsample=None
-        )
-        records.append(
-            {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
-                "training_samples": len(X_tr_rf),
-                **{
-                    k: v
-                    for k, v in xgb_res.items()
-                    if not k.endswith("_pred") and k != "fitted_model"
-                },
-            }
-        )
-        if "XGBoost" not in test_preds_by_model:
-            test_preds_by_model["XGBoost"] = xgb_res["test_pred"]
-
-        # 4. Tuned MLP (200k subsample, matching Himanshu's tuning scale)
-        mlp_res = run_tuned_mlp(
-            X_tr_raw, y_tr, X_va_raw, y_val, X_te_raw, y_test, seed=s, subsample=200000
-        )
-        records.append(
-            {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
-                "training_samples": 200000,
-                **{
-                    k: v
-                    for k, v in mlp_res.items()
-                    if not k.endswith("_pred") and k not in ("fitted_model", "loaders", "history")
-                },
-            }
-        )
-        if "Tuned MLP" not in test_preds_by_model:
-            test_preds_by_model["Tuned MLP"] = mlp_res["test_pred"]
-
-        # 5. Hybrid (20k subsample, matching Jivit's hybrid benchmark)
-        hybrid_res = run_hybrid_model(seed=s, subsample=20000, eval_test=True)
-        records.append(
-            {
-                "benchmark": "project_scale",
-                "benchmark_disclosure": BENCHMARK_LABEL,
-                "training_samples": 20000,
-                **{k: v for k, v in hybrid_res.items() if not k.endswith("_pred")},
-            }
-        )
-        if "Hybrid (XGBoost + Residual MLP)" not in test_preds_by_model:
-            test_preds_by_model["Hybrid (XGBoost + Residual MLP)"] = hybrid_res["test_pred"]
-
-        if verbose:
-            print(f"  Naive:    Test RMSE={naive_res['test_rmse']:.4f}")
-            print(f"  RF 100k:  Test RMSE={rf_res['test_rmse']:.4f}")
-            print(f"  XGB Full: Test RMSE={xgb_res['test_rmse']:.4f}")
-            print(f"  MLP 200k: Test RMSE={mlp_res['test_rmse']:.4f}")
-            print(f"  Hybrid:   Test RMSE={hybrid_res['test_rmse']:.4f}")
 
     raw_df = pd.DataFrame(records)
 
@@ -904,21 +990,41 @@ def run_scale_comparison(
         "val_mae",
         "val_rmse",
         "val_r2",
+        "val_p95_ae",
+        "val_p99_ae",
+        "val_max_ae",
         "test_mae",
         "test_rmse",
         "test_r2",
+        "test_p95_ae",
+        "test_p99_ae",
+        "test_max_ae",
         "fit_time_s",
-        "n_params",
+        "size (parameters or tree nodes)",
     ]
-    summary_df = (
-        raw_df.groupby(["model", "training_samples"])[metric_cols].agg(["mean", "std"]).round(4)
-    )
-    summary_df.columns = [f"{col}_{stat}" for col, stat in summary_df.columns]
-    summary_df["benchmark"] = "project_scale"
-    summary_df["n_seeds"] = raw_df.groupby(["model", "training_samples"])["seed"].count().values
-    summary_df = summary_df.reset_index().sort_values("test_rmse_mean")
+    summary_rows = []
+    for r in records:
+        row_dict = {
+            "model": r["model"],
+            "training_samples": r["training_samples"],
+            "benchmark": "reported_operating_points_not_comparable",
+            "n_seeds": 1,
+        }
+        for m in metric_cols:
+            row_dict[f"{m}_mean"] = round(r[m], 4)
+            row_dict[f"{m}_std"] = 0.0000
+        summary_rows.append(row_dict)
 
-    return raw_df, summary_df, test_preds_by_model
+    summary_df = pd.DataFrame(summary_rows)
+
+    if verbose:
+        for r in records:
+            print(
+                f"  {r['model']:<46} | Samples: {r['training_samples']:>9,} | "
+                f"Test RMSE: {r['test_rmse']:.4f} | R2: {r['test_r2']:.4f} | Size: {r['size (parameters or tree nodes)']:>10,}"
+            )
+
+    return raw_df, summary_df
 
 
 # ---------------------------------------------------------------------------
@@ -934,7 +1040,7 @@ def compute_error_breakdown_by_country(
     m1_name: str = "XGBoost",
     m2_name: str = "Tuned MLP",
 ) -> pd.DataFrame:
-    """Compute MAE and RMSE breakdown by Country for the top two models."""
+    """Compute MAE, RMSE, P95, and Max absolute error breakdown by Country."""
     df = pd.DataFrame(
         {
             "Country": np.asarray(countries),
@@ -947,26 +1053,38 @@ def compute_error_breakdown_by_country(
     rows = []
     for c, grp in df.groupby("Country"):
         n_obs = len(grp)
-        m1_mae = float(np.mean(np.abs(grp["y_true"] - grp["y_m1"])))
-        m1_rmse = float(np.sqrt(np.mean((grp["y_true"] - grp["y_m1"]) ** 2)))
-        m2_mae = float(np.mean(np.abs(grp["y_true"] - grp["y_m2"])))
-        m2_rmse = float(np.sqrt(np.mean((grp["y_true"] - grp["y_m2"]) ** 2)))
+        e1 = np.abs(grp["y_true"] - grp["y_m1"])
+        e2 = np.abs(grp["y_true"] - grp["y_m2"])
+        m1_mae = float(np.mean(e1))
+        m1_rmse = float(np.sqrt(np.mean(e1**2)))
+        m1_p95 = float(np.percentile(e1, 95))
+        m1_max = float(np.max(e1))
+
+        m2_mae = float(np.mean(e2))
+        m2_rmse = float(np.sqrt(np.mean(e2**2)))
+        m2_p95 = float(np.percentile(e2, 95))
+        m2_max = float(np.max(e2))
+
         winner = m1_name if m1_rmse < m2_rmse else m2_name
 
         rows.append(
             {
-                "Country": c,
+                "Country": str(c),
                 "sample_count": n_obs,
                 f"{m1_name}_mae": round(m1_mae, 4),
                 f"{m1_name}_rmse": round(m1_rmse, 4),
+                f"{m1_name}_p95_ae": round(m1_p95, 4),
+                f"{m1_name}_max_ae": round(m1_max, 4),
                 f"{m2_name}_mae": round(m2_mae, 4),
                 f"{m2_name}_rmse": round(m2_rmse, 4),
+                f"{m2_name}_p95_ae": round(m2_p95, 4),
+                f"{m2_name}_max_ae": round(m2_max, 4),
                 "delta_rmse (m2 - m1)": round(m2_rmse - m1_rmse, 4),
                 "best_model": winner,
             }
         )
 
-    return pd.DataFrame(rows).sort_values("sample_count", ascending=False)
+    return pd.DataFrame(rows)
 
 
 def compute_error_breakdown_by_area(
@@ -993,10 +1111,18 @@ def compute_error_breakdown_by_area(
     for a in top_areas:
         grp = df[df["Area"] == a]
         n_obs = len(grp)
-        m1_mae = float(np.mean(np.abs(grp["y_true"] - grp["y_m1"])))
-        m1_rmse = float(np.sqrt(np.mean((grp["y_true"] - grp["y_m1"]) ** 2)))
-        m2_mae = float(np.mean(np.abs(grp["y_true"] - grp["y_m2"])))
-        m2_rmse = float(np.sqrt(np.mean((grp["y_true"] - grp["y_m2"]) ** 2)))
+        e1 = np.abs(grp["y_true"] - grp["y_m1"])
+        e2 = np.abs(grp["y_true"] - grp["y_m2"])
+        m1_mae = float(np.mean(e1))
+        m1_rmse = float(np.sqrt(np.mean(e1**2)))
+        m1_p95 = float(np.percentile(e1, 95))
+        m1_max = float(np.max(e1))
+
+        m2_mae = float(np.mean(e2))
+        m2_rmse = float(np.sqrt(np.mean(e2**2)))
+        m2_p95 = float(np.percentile(e2, 95))
+        m2_max = float(np.max(e2))
+
         winner = m1_name if m1_rmse < m2_rmse else m2_name
 
         rows.append(
@@ -1005,8 +1131,12 @@ def compute_error_breakdown_by_area(
                 "sample_count": n_obs,
                 f"{m1_name}_mae": round(m1_mae, 4),
                 f"{m1_name}_rmse": round(m1_rmse, 4),
+                f"{m1_name}_p95_ae": round(m1_p95, 4),
+                f"{m1_name}_max_ae": round(m1_max, 4),
                 f"{m2_name}_mae": round(m2_mae, 4),
                 f"{m2_name}_rmse": round(m2_rmse, 4),
+                f"{m2_name}_p95_ae": round(m2_p95, 4),
+                f"{m2_name}_max_ae": round(m2_max, 4),
                 "delta_rmse (m2 - m1)": round(m2_rmse - m1_rmse, 4),
                 "best_model": winner,
             }
@@ -1034,11 +1164,11 @@ def generate_comparison_plots(
     out.mkdir(parents=True, exist_ok=True)
 
     # 1. Bar chart comparing Test RMSE across models
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
 
     # Controlled Subsample panel
     df_ctrl = controlled_summary_df.sort_values("test_rmse_mean")
-    colors_ctrl = ["#2ca02c", "#1f77b4", "#ff7f0e", "#9467bd", "#d62728"]
+    colors_ctrl = ["#2ca02c", "#1f77b4", "#17becf", "#ff7f0e", "#9467bd", "#d62728"]
     axes[0].barh(
         df_ctrl["model"],
         df_ctrl["test_rmse_mean"],
@@ -1049,13 +1179,13 @@ def generate_comparison_plots(
         alpha=0.85,
     )
     axes[0].set_title(
-        "Controlled Benchmark (Exact 20k rows, 5 seeds)\n" + BENCHMARK_LABEL,
-        fontsize=10,
+        "Table 1: Controlled Benchmark (Exact 20k rows, 5 seeds)\n" + BENCHMARK_LABEL,
+        fontsize=9,
     )
     axes[0].set_xlabel("Test RMSE (Lower is Better)")
     axes[0].grid(axis="x", linestyle="--", alpha=0.5)
 
-    # Scale Benchmark panel
+    # Reported Operating Points panel
     df_scale = scale_summary_df.sort_values("test_rmse_mean")
     if "training_samples" in df_scale.columns:
         labels_scale = [
@@ -1068,14 +1198,14 @@ def generate_comparison_plots(
         labels_scale,
         df_scale["test_rmse_mean"],
         xerr=df_scale["test_rmse_std"],
-        color=["#2ca02c", "#1f77b4", "#ff7f0e", "#9467bd", "#d62728"][: len(df_scale)],
+        color=["#2ca02c", "#1f77b4", "#17becf", "#ff7f0e", "#9467bd", "#d62728"][: len(df_scale)],
         capsize=4,
         edgecolor="black",
         alpha=0.85,
     )
     axes[1].set_title(
-        "Project Scale Benchmark (Phase 1 & 2 Capacities)\n" + BENCHMARK_LABEL,
-        fontsize=10,
+        "Table 2: Earlier Single-Seed Operating Points (Not Comparable)\n" + BENCHMARK_LABEL,
+        fontsize=9,
     )
     axes[1].set_xlabel("Test RMSE (Lower is Better)")
     axes[1].grid(axis="x", linestyle="--", alpha=0.5)
@@ -1086,7 +1216,7 @@ def generate_comparison_plots(
     plt.close(fig)
 
     # 2. Country Error Breakdown Plot
-    fig, ax = plt.subplots(figsize=(8, 4.8))
+    fig, ax = plt.subplots(figsize=(8.5, 4.8))
     x = np.arange(len(country_df))
     width = 0.35
 
@@ -1111,7 +1241,7 @@ def generate_comparison_plots(
     )
     ax.set_ylabel("Test RMSE (CCME Index Points)")
     ax.set_title(f"Test RMSE Breakdown by Country ({m1_label} vs. {m2_label})")
-    ax.legend()
+    ax.legend(fontsize=8)
     ax.grid(axis="y", linestyle="--", alpha=0.5)
 
     plt.tight_layout()
@@ -1120,7 +1250,7 @@ def generate_comparison_plots(
     plt.close(fig)
 
     # 3. Top Areas Error Breakdown Plot
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(10.5, 5))
     x = np.arange(len(area_df))
     ax.bar(
         x - width / 2, area_df[m1_col], width, label=m1_label, color="#1f77b4", edgecolor="black"
@@ -1139,7 +1269,7 @@ def generate_comparison_plots(
     )
     ax.set_ylabel("Test RMSE (CCME Index Points)")
     ax.set_title("Test RMSE Breakdown for Top 10 Monitoring Stations by Volume")
-    ax.legend()
+    ax.legend(fontsize=8)
     ax.grid(axis="y", linestyle="--", alpha=0.5)
 
     plt.tight_layout()
@@ -1149,36 +1279,30 @@ def generate_comparison_plots(
 
 
 # ---------------------------------------------------------------------------
-# Technical Validation: Leakage Checks & Compute Cost
+# Technical Validation: Anti-Leakage & Compute Cost Audits
 # ---------------------------------------------------------------------------
 
 
 def run_leakage_checks(output_path: Path | str | None = None) -> pd.DataFrame:
-    """Execute comprehensive technical leakage verification checks.
+    """Execute and save 5-point data leakage and isolation verification."""
+    from src.split import get_split_indices
 
-    Validates:
-      1. Scaler fit isolation: QuantileTransformer / StandardScaler fitted on train only.
-      2. Target standardization isolation: y_mean and y_std computed from train split only.
-      3. Partition disjointness: zero row overlap between train, val, and test splits.
-      4. Spatial group isolation: zero monitoring station ('Area') overlap in GroupKFold folds.
-      5. Feature hygiene: zero direct formula or target label components in feature matrices.
-    """
     out_file = Path(output_path) if output_path else REPORTS / "leakage_check.csv"
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    checks: list[dict[str, Any]] = []
+    checks = []
 
-    # Load splits
-    X_tr, X_va, X_te, y_tr, y_va, y_te = get_splits(include_metadata=True, scale_numeric=False)
-
-    # Check 1: Partition Row Disjointness
-    set_tr = set(X_tr.index)
-    set_va = set(X_va.index)
-    set_te = set(X_te.index)
-    tr_va_overlap = len(set_tr & set_va)
-    tr_te_overlap = len(set_tr & set_te)
-    va_te_overlap = len(set_va & set_te)
-    row_disjoint = tr_va_overlap == 0 and tr_te_overlap == 0 and va_te_overlap == 0
+    # Check 1: Row disjointness
+    split_indices = get_split_indices()
+    tr_set, va_set, te_set = (
+        set(split_indices["train"]),
+        set(split_indices["val"]),
+        set(split_indices["test"]),
+    )
+    overlap_tr_va = len(tr_set & va_set)
+    overlap_tr_te = len(tr_set & te_set)
+    overlap_va_te = len(va_set & te_set)
+    row_disjoint = (overlap_tr_va == 0) and (overlap_tr_te == 0) and (overlap_va_te == 0)
     checks.append(
         {
             "check_id": "CHK_01_ROW_DISJOINTNESS",
@@ -1186,20 +1310,20 @@ def run_leakage_checks(output_path: Path | str | None = None) -> pd.DataFrame:
             "component": "src.split / splits.parquet",
             "status": "PASSED" if row_disjoint else "FAILED",
             "details": (
-                f"Train={len(X_tr):,}, Val={len(X_va):,}, Test={len(X_te):,}. "
-                f"Overlaps: Tr-Va={tr_va_overlap}, Tr-Te={tr_te_overlap}, Va-Te={va_te_overlap}."
+                f"Train={len(tr_set):,}, Val={len(va_set):,}, Test={len(te_set):,}. "
+                f"Overlaps: Tr-Va={overlap_tr_va}, Tr-Te={overlap_tr_te}, Va-Te={overlap_va_te}."
             ),
         }
     )
 
-    # Check 2: Scaler Fit Isolation (Train Only)
+    # Check 2: Preprocessing Fit Isolation (Train Only)
     from sklearn.preprocessing import QuantileTransformer
 
-    qt = QuantileTransformer(output_distribution="normal", random_state=42)
+    X_tr, X_va, X_te, y_tr, y_va, y_te = get_splits(include_metadata=False, scale_numeric=False)
     numeric_cols = [c for c in X_tr.columns if pd.api.types.is_numeric_dtype(X_tr[c])]
+    qt = QuantileTransformer(n_quantiles=1000, output_distribution="normal", random_state=42)
     qt.fit(X_tr[numeric_cols].iloc[:10000])
     q_before = qt.quantiles_.copy()
-    # Verify transforming val does not mutate learned quantiles
     qt.transform(X_va[numeric_cols].iloc[:1000])
     scaler_isolated = np.array_equal(q_before, qt.quantiles_)
     checks.append(
@@ -1308,7 +1432,6 @@ def measure_compute_cost(
     out_file = Path(output_path) if output_path else REPORTS / "compute_cost.csv"
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Hardware metadata
     hw_info = {
         "os": platform.platform(),
         "processor": platform.processor() or "Apple Silicon",
@@ -1316,7 +1439,6 @@ def measure_compute_cost(
         "torch_version": torch.__version__,
     }
 
-    # Load validation slice for inference measurement
     X_tr_rf, X_va_rf, X_te_rf, y_tr, y_va, y_te = load_rf_splits(
         regime=1, feature_set="engineered", partial_scenario="8/8"
     )
@@ -1324,7 +1446,6 @@ def measure_compute_cost(
     n_infer = min(100000, len(X_va_rf))
     X_infer_rf = X_va_rf.iloc[:n_infer]
 
-    # If fitted models from benchmark are not provided, train small models on subsample
     if fitted_models is None:
         X_tr_raw, X_va_raw, X_te_raw, _, _, _ = get_splits(
             include_metadata=True, scale_numeric=False
@@ -1335,17 +1456,41 @@ def measure_compute_cost(
         rf_m = run_random_forest(
             X_tr_rf, y_tr, X_va_rf, y_va, X_te_rf, y_te, seed=42, subsample=subsample
         )
-        xgb_m = run_xgboost(
-            X_tr_rf, y_tr, X_va_rf, y_va, X_te_rf, y_te, seed=42, subsample=subsample
+        xgb_tuned_m = run_xgboost(
+            X_tr_rf,
+            y_tr,
+            X_va_rf,
+            y_va,
+            X_te_rf,
+            y_te,
+            seed=42,
+            params=XGB_FIXED_PARAMS_TUNED,
+            subsample=subsample,
+            model_name="XGBoost (Phase 1 Tuned, 23 Eng Features)",
+        )
+        xgb_base_m = run_xgboost(
+            X_tr_raw,
+            y_tr,
+            X_va_raw,
+            y_va,
+            X_te_raw,
+            y_te,
+            seed=42,
+            params=XGB_FIXED_PARAMS_BASE,
+            subsample=subsample,
+            model_name="XGBoost (Jivit Hybrid Base, 10 Raw Features)",
         )
         mlp_m = run_tuned_mlp(
             X_tr_raw, y_tr, X_va_raw, y_va, X_te_raw, y_te, seed=42, subsample=subsample
         )
-        hybrid_m = run_hybrid_model(seed=42, subsample=subsample, eval_test=True)
+        hybrid_m = run_hybrid_model(
+            seed=42, subsample=subsample, eval_test=True, y_val=y_va, y_test=y_te
+        )
         fitted_models = {
             "naive": naive_m,
             "rf": rf_m,
-            "xgb": xgb_m,
+            "xgb_tuned": xgb_tuned_m,
+            "xgb_base": xgb_base_m,
             "mlp": mlp_m,
             "hybrid": hybrid_m,
         }
@@ -1361,7 +1506,7 @@ def measure_compute_cost(
         {
             "model": "Naive Baseline",
             "training_size": subsample,
-            "n_params_exact": 1,
+            "size (parameters or tree nodes)": 1,
             "train_time_s": round(naive_res["fit_time_s"], 3),
             "inference_time_100k_s": round(t_inf * (100000 / n_infer), 4),
             "hardware": f"{hw_info['processor']} ({hw_info['cpu_count']} cores)",
@@ -1381,7 +1526,7 @@ def measure_compute_cost(
         {
             "model": "Random Forest",
             "training_size": subsample,
-            "n_params_exact": rf_res["n_params"],
+            "size (parameters or tree nodes)": rf_res["size (parameters or tree nodes)"],
             "train_time_s": round(rf_res["fit_time_s"], 3),
             "inference_time_100k_s": round(t_inf_rf * (100000 / n_infer), 4),
             "hardware": f"{hw_info['processor']} ({hw_info['cpu_count']} cores)",
@@ -1389,8 +1534,8 @@ def measure_compute_cost(
         }
     )
 
-    # 3. XGBoost
-    xgb_res = fitted_models["xgb"]
+    # 3. XGBoost (Tuned, 23 Eng Features)
+    xgb_res = fitted_models.get("xgb_tuned", fitted_models.get("xgb"))
     xgb_model = xgb_res["fitted_model"]
     X_tr_m, X_inf_m, _ = match_categories(X_tr_rf.iloc[:100], X_infer_rf, X_infer_rf)
     t_inf0 = time.perf_counter()
@@ -1398,9 +1543,9 @@ def measure_compute_cost(
     t_inf_xgb = time.perf_counter() - t_inf0
     rows.append(
         {
-            "model": "XGBoost",
+            "model": "XGBoost (Phase 1 Tuned, 23 Eng Features)",
             "training_size": subsample,
-            "n_params_exact": xgb_res["n_params"],
+            "size (parameters or tree nodes)": xgb_res["size (parameters or tree nodes)"],
             "train_time_s": round(xgb_res["fit_time_s"], 3),
             "inference_time_100k_s": round(t_inf_xgb * (100000 / n_infer), 4),
             "hardware": f"{hw_info['processor']} ({hw_info['cpu_count']} cores)",
@@ -1419,52 +1564,49 @@ def measure_compute_cost(
     X_inf_t = torch.as_tensor(X_val_np[:n_mlp_infer], dtype=torch.float32, device=device)
     t_inf0 = time.perf_counter()
     with torch.no_grad():
-        _ = mlp_model(X_inf_t).cpu().numpy()
-    t_inf_mlp = (time.perf_counter() - t_inf0) * (100000 / n_mlp_infer)
+        _ = mlp_model(X_inf_t)
+    t_inf_mlp = time.perf_counter() - t_inf0
     rows.append(
         {
             "model": "Tuned MLP (256x4 GELU)",
             "training_size": subsample,
-            "n_params_exact": mlp_res["n_params"],
+            "size (parameters or tree nodes)": mlp_res["size (parameters or tree nodes)"],
             "train_time_s": round(mlp_res["fit_time_s"], 3),
-            "inference_time_100k_s": round(t_inf_mlp, 4),
+            "inference_time_100k_s": round(t_inf_mlp * (100000 / n_mlp_infer), 4),
             "hardware": f"{hw_info['processor']} ({hw_info['cpu_count']} cores)",
-            "framework": f"pytorch-{torch.__version__}",
+            "framework": f"pytorch-{hw_info['torch_version']}",
         }
     )
 
-    # 5. Hybrid
+    # 5. Hybrid (XGBoost Base + Residual MLP)
     hybrid_res = fitted_models["hybrid"]
     rows.append(
         {
-            "model": "Hybrid (XGBoost + Residual MLP)",
+            "model": "Hybrid (XGBoost Base + Residual MLP)",
             "training_size": subsample,
-            "n_params_exact": hybrid_res["n_params"],
+            "size (parameters or tree nodes)": 11809,
             "train_time_s": round(hybrid_res["fit_time_s"], 3),
-            "inference_time_100k_s": round(t_inf_xgb + t_inf_mlp, 4),
+            "inference_time_100k_s": round(
+                t_inf_xgb * (100000 / n_infer) + t_inf_mlp * (100000 / n_mlp_infer), 4
+            ),
             "hardware": f"{hw_info['processor']} ({hw_info['cpu_count']} cores)",
-            "framework": "xgboost + pytorch",
+            "framework": "xgboost + pytorch (size: MLP only)",
         }
     )
 
-    df_cost = pd.DataFrame(rows)
-    df_cost.to_csv(out_file, index=False)
-    return df_cost
-
-    df_cost = pd.DataFrame(rows)
-    df_cost.to_csv(out_file, index=False)
-    return df_cost
+    cost_df = pd.DataFrame(rows)
+    cost_df.to_csv(out_file, index=False)
+    return cost_df
 
 
 # ---------------------------------------------------------------------------
-# Main Orchestration CLI
+# CLI and Main Benchmark Driver
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    """Run Phase 2 final comparison, leakage checks, compute costs, and plots."""
     parser = argparse.ArgumentParser(
-        description="Phase 2 final model comparison and technical validation."
+        description="Phase 2 Final Model Comparison and Technical Validation."
     )
     parser.add_argument(
         "--quick",
@@ -1483,23 +1625,20 @@ def main() -> None:
     subsample = 5000 if args.quick else args.subsample
 
     print("\n" + "=" * 78)
-    print("PHASE 2 FINAL COMPARISON AND TECHNICAL VALIDATION")
+    print("PHASE 2 FINAL COMPARISON AND TECHNICAL VALIDATION (CORRECTION PASS)")
     print(f"Seeds: {seeds} | Subsample: {subsample:,} | Quick mode: {args.quick}")
     print("=" * 78)
 
-    # 1. Controlled Subsample Benchmark
+    # 1. Controlled Subsample Benchmark (Table 1)
     ctrl_raw, ctrl_summary, ctrl_preds, first_models = run_controlled_comparison(
         seeds=seeds, subsample=subsample, verbose=True
     )
 
-    # 2. Project Scale Benchmark (if not quick)
-    if not args.quick:
-        scale_raw, scale_summary, scale_preds = run_scale_comparison(seeds=seeds, verbose=True)
-        combined_raw = pd.concat([ctrl_raw, scale_raw], ignore_index=True)
-        combined_summary = pd.concat([ctrl_summary, scale_summary], ignore_index=True)
-    else:
-        combined_raw = ctrl_raw
-        combined_summary = ctrl_summary
+    # 2. Table 2: Reported Operating Points from Earlier Single-Seed Runs
+    scale_raw, scale_summary = run_scale_comparison(verbose=True)
+
+    combined_raw = pd.concat([ctrl_raw, scale_raw], ignore_index=True)
+    combined_summary = pd.concat([ctrl_summary, scale_summary], ignore_index=True)
 
     # Save final benchmark CSV reports
     comp_file = REPORTS / "final_comparison.csv"
@@ -1509,23 +1648,26 @@ def main() -> None:
     print(f"\n[Saved] Final comparison per-seed records: {comp_file}")
     print(f"[Saved] Final comparison summary:          {summary_file}")
 
-    # 3. Error Breakdown by Country and Area (for top 2 models: XGBoost vs Tuned MLP)
+    # 3. Error Breakdown by Country and Area (for top 2 models: XGBoost Tuned vs Tuned MLP)
     _, _, _, _, _, y_test = get_splits(include_metadata=True, scale_numeric=False)
     test_meta = pd.read_parquet(CLEAN_PARQUET, columns=["Country", "Area"]).loc[y_test.index]
 
-    if "XGBoost" in ctrl_preds and "Tuned MLP" in ctrl_preds:
+    m1_name = "XGBoost (Phase 1 Tuned, 23 Eng Features)"
+    m2_name = "Tuned MLP (4x256 GELU, 10 Raw Features)"
+
+    if m1_name in ctrl_preds and m2_name in ctrl_preds:
         country_df = compute_error_breakdown_by_country(
             np.asarray(y_test),
-            ctrl_preds["XGBoost"],
-            ctrl_preds["Tuned MLP"],
+            ctrl_preds[m1_name],
+            ctrl_preds[m2_name],
             test_meta["Country"],
             m1_name="XGBoost",
             m2_name="Tuned MLP",
         )
         area_df = compute_error_breakdown_by_area(
             np.asarray(y_test),
-            ctrl_preds["XGBoost"],
-            ctrl_preds["Tuned MLP"],
+            ctrl_preds[m1_name],
+            ctrl_preds[m2_name],
             test_meta["Area"],
             m1_name="XGBoost",
             m2_name="Tuned MLP",
@@ -1542,7 +1684,7 @@ def main() -> None:
         # 4. Diagnostic Figures
         generate_comparison_plots(
             ctrl_summary,
-            ctrl_summary if args.quick else scale_summary,
+            scale_summary,
             country_df,
             area_df,
         )
