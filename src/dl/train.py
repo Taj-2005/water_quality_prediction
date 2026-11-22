@@ -440,7 +440,7 @@ def train(
                 break
 
     # 8. Reload best checkpoint weights into model
-    if checkpoint_path.exists():
+    if checkpoint_path.exists() and best_epoch > 0:
         try:
             ckpt = torch.load(checkpoint_path, map_location=device)
         except Exception:

@@ -1,14 +1,7 @@
 """Deep learning package for Phase 2 Water Quality Prediction.
 
-Provides:
-  * Seeds & reproducibility: set_seed, seed_worker
-  * Dataset & DataLoader: WaterQualityDataset, LoadersBundle, get_loaders
-  * Models: WaterQualityMLP, create_mlp, get_activation
-  * Training & Evaluation: train, evaluate_loader, log_run, get_loss_function, get_device
-
-Contributors:
-  * Parthraj Singh Bhati (Data loaders, training loop, seeds)
-  * Himanshu Pandey (Model architecture, base MLP, ablations)
+Public APIs are loaded lazily to keep lightweight metric and notebook imports
+from eagerly initializing PyTorch modules.
 """
 
 from __future__ import annotations
@@ -32,17 +25,28 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "get_loss_function": ("src.dl.train", "get_loss_function"),
     "get_device": ("src.dl.train", "get_device"),
     "aggregate_architecture": ("src.dl.architecture", "aggregate_architecture"),
-    "mc_dropout_predictions": ("src.dl.calibration", "mc_dropout_predictions"),
-    "prediction_intervals": ("src.dl.calibration", "prediction_intervals"),
-    "expected_calibration_error": ("src.dl.calibration", "expected_calibration_error"),
-    "summarize_seed_runs": ("src.dl.comparison", "summarize_seed_runs"),
     "make_oof_predictions": ("src.dl.hybrid", "make_oof_predictions"),
     "evaluate_hybrid": ("src.dl.hybrid", "evaluate_hybrid"),
+    "prediction_interval_coverage": ("src.dl.calibration", "prediction_interval_coverage"),
+    "calibrate_conformal_quantile": ("src.dl.calibration", "calibrate_conformal_quantile"),
+    "conformal_prediction_intervals": ("src.dl.calibration", "conformal_prediction_intervals"),
+    "enable_dropout_only": ("src.dl.calibration", "enable_dropout_only"),
+    "monte_carlo_dropout_predict": ("src.dl.calibration", "monte_carlo_dropout_predict"),
+    "mc_dropout_prediction_intervals": ("src.dl.calibration", "mc_dropout_prediction_intervals"),
+    "permutation_feature_importance_mlp": ("src.dl.calibration", "permutation_feature_importance_mlp"),
+    "reliability_diagram_data": ("src.dl.calibration", "reliability_diagram_data"),
+    "expected_calibration_error": ("src.dl.calibration", "expected_calibration_error"),
+    "category_calibration_summary": ("src.dl.calibration", "category_calibration_summary"),
+    "calibration_summary": ("src.dl.calibration", "calibration_summary"),
+    "mc_dropout_predictions": ("src.dl.calibration", "mc_dropout_predictions"),
+    "prediction_intervals": ("src.dl.calibration", "prediction_intervals"),
+    "reliability_diagram": ("src.dl.calibration", "reliability_diagram"),
+    "continuous_model_metrics": ("src.dl.calibration", "continuous_model_metrics"),
 }
 
 
 def __getattr__(name: str) -> Any:
-    """Load public DL classes and functions only when requested."""
+    """Load public deep learning classes and functions on first access."""
     if name not in _LAZY_IMPORTS:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     module_name, attr_name = _LAZY_IMPORTS[name]
@@ -52,27 +56,5 @@ def __getattr__(name: str) -> Any:
     globals()[name] = value
     return value
 
-__all__ = [
-    "build_nn_preprocessor",
-    "transform_splits",
-    "set_seed",
-    "seed_worker",
-    "WaterQualityDataset",
-    "LoadersBundle",
-    "get_loaders",
-    "WaterQualityMLP",
-    "create_mlp",
-    "get_activation",
-    "train",
-    "evaluate_loader",
-    "log_run",
-    "get_loss_function",
-    "get_device",
-    "aggregate_architecture",
-    "mc_dropout_predictions",
-    "prediction_intervals",
-    "expected_calibration_error",
-    "summarize_seed_runs",
-    "make_oof_predictions",
-    "evaluate_hybrid",
-]
+
+__all__ = list(_LAZY_IMPORTS)

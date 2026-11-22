@@ -1,32 +1,29 @@
 # Phase 2 report
 
-The IEEE conference-format Phase 2 report is built from `main.tex` and summarizes
-saved project evidence for neural input conditioning, regularization, architecture
-selection, and the leakage-safe residual hybrid. It links the Phase 1 findings to the
-Phase 2 motivation and distinguishes saved results from evaluations that remain
-outstanding.
+The IEEE conference-format report is built from `main.tex` and summarizes Phase 1
+context plus saved Phase 2 evidence for neural input conditioning, regularization,
+architecture selection, residual hybrid evaluation, a five-seed model comparison,
+leakage checks, subgroup error summaries, and compute cost. The companion presentation
+is `water_quality_prediction_phase2_presentation.pdf`.
 
-The companion Phase 2 presentation is included as
-`water_quality_prediction_phase2_presentation.pdf`.
+The report uses the checked-in CSVs and notebooks, distinguishing the controlled
+20,000-row five-seed comparison from earlier operating points with different training
+scales. It records empirical calibration/interval-coverage results, MLP feature
+attribution, and temporal error analysis as outstanding because no numerical outputs
+for those analyses are saved. Area and country analyses, cost measurements, and the
+five technical leakage checks are included from the latest project evidence.
 
-## Evidence included
+## Evidence references
 
-- Phase 1 benchmark and partial-measurement context, attributed to the companion IEEE PDF.
-- Phase 2 preprocessing and regularization results recorded in the project report sources.
-- Five-seed architecture and hybrid ablations, with notebooks and CSVs at
-  `notebooks/14_architecture.ipynb`, `notebooks/15_hybrid.ipynb`, and `reports/`.
-- Architecture figures at `reports/figures/architecture_*.png`.
-
-The report is complete as an account of the artifacts available in this branch. It
-explicitly identifies calibration/interval coverage, MLP explainability, Phase 2
-site/time error analysis, and complete MLP compute timings as not yet empirically
-reported. It also explains that the hybrid test CSV repeats seed 42 and therefore is
-not a multi-seed test comparison. No results are inferred for missing evaluations.
-
-Some saved notebooks and artifacts were recovered from locally available feature
-branch refs because the local `origin/main` snapshot did not contain them. A network
-fetch of GitHub was unavailable during this work, so the online main branch could not
-be checked independently.
+- Architecture and hybrid experiments: `notebooks/14_architecture.ipynb`,
+  `notebooks/15_hybrid.ipynb`, and the associated `reports/mlp_*.csv` and
+  `reports/hybrid_*.csv` files.
+- Controlled final comparison, paired differences, leakage checks, subgroup errors,
+  and compute cost: `notebooks/10_final_comparison.ipynb` and `reports/final_comparison*.csv`,
+  `reports/paired_differences.csv`, `reports/leakage_check.csv`, and
+  `reports/compute_cost.csv`.
+- Calibration and explainability implementation: `notebooks/16_calibration*.ipynb`
+  and `src/dl/calibration.py`.
 
 ## Build
 

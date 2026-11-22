@@ -23,8 +23,11 @@ checkpoints/
 __pycache__/
 *.py[cod]
 *.egg-info/
+.venv
 .venv/
+venv
 venv/
+env
 env/
 .pytest_cache/
 .ruff_cache/
@@ -54,3 +57,4 @@ report/build/
 
 # Local work plan
 Water Quality Prediction Phase 1 Work Plan.pdf
+Water Quality Prediction Phase 2 Work Plan.pdf

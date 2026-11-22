@@ -5,6 +5,8 @@ report are trustworthy.
 
   * continuous target  -> MAE, RMSE, R-squared, MAPE, Median Absolute Error
   * defined classes    -> macro F1, per-class F1, accuracy, calibration data
+  * calibration suite  -> reliability_diagram_data, expected_calibration_error,
+                          calibration_summary (Phase 2 — covers all models)
 
 All functions accept array-like inputs (NumPy arrays, pandas Series, Python lists)
 and return plain Python dicts so the caller can log them directly to CSV.
@@ -12,6 +14,8 @@ and return plain Python dicts so the caller can log them directly to CSV.
 Usage
 -----
     from src.metrics import regression_metrics, classification_metrics
+    from src.metrics import reliability_diagram_data, expected_calibration_error
+    from src.metrics import calibration_summary
 
     # Regression (primary task — CCME_Values)
     metrics = regression_metrics(y_true, y_pred)
@@ -20,6 +24,11 @@ Usage
     # Classification (CCME_WQI category if needed in ablations)
     metrics = classification_metrics(y_true_labels, y_pred_labels)
     # {'accuracy': ..., 'macro_f1': ..., 'per_class_f1': {...}, ...}
+
+    # Calibration (Phase 2 — reliability diagram + ECE for all models)
+    rd = reliability_diagram_data(y_true, y_pred, n_bins=10)
+    ece = expected_calibration_error(y_true, y_pred, n_bins=10)
+    summary = calibration_summary(y_true, y_pred)
 """
 
 from __future__ import annotations
@@ -391,4 +400,396 @@ def calibration_data(
     return {
         "classification_metrics": cls_metrics,
         "category_labels": ordered_labels,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Calibration suite — Phase 2.  Owner: Satya Yadav.
+#
+# Context
+# -------
+# CCME_Values is a continuous index in [31.3, 100]. The five CCME WQI categories
+# (Poor / Marginal / Fair / Good / Excellent) partition that range. A model's
+# *regression* error (MAE, RMSE) tells us how far off it is in index points, but
+# it does not tell us whether the model correctly identifies the *category* a
+# sample belongs to, nor how confident (in the fraction-of-time sense) it is
+# about that decision.
+#
+# The calibration suite answers: for every interval of predicted index values,
+# what fraction of true values actually land in that interval?  A perfectly
+# calibrated regressor would have this fraction equal to the interval width.
+# We operationalise this using the same framework as reliability diagrams for
+# classifiers (DeGroot & Fienberg 1983; Niculescu-Mizil & Caruana 2005):
+#
+#   • Split the prediction axis into equal-width bins.
+#   • For each bin, record the mean predicted value and the mean true value.
+#   • A perfect calibration curve lies on the y = x diagonal.
+#   • ECE (Expected Calibration Error) is the bin-size-weighted mean absolute
+#     deviation from the diagonal — one number summarising overall calibration.
+#   • MCE (Maximum Calibration Error) is the worst-case bin deviation.
+#
+# For a *regression* target we adapt the standard classification reliability
+# diagram: instead of treating confidence as the probability of the positive
+# class, we treat the predicted index value as the "confidence" and the true
+# index value as the "outcome", both normalised to [0, 1] so the ECE is in
+# the same units regardless of model.
+#
+# We also provide a CCME-category–level calibration view: for each of the five
+# categories we compute the fraction of samples whose predicted category matches
+# their true category (category accuracy), mirroring the per-class reliability
+# concept.
+# ---------------------------------------------------------------------------
+
+CCME_INDEX_RANGE: tuple[float, float] = (0.0, 100.0)
+"""Full range of the CCME index used for normalisation in calibration metrics."""
+
+
+def reliability_diagram_data(
+    y_true: Any,
+    y_pred: Any,
+    *,
+    n_bins: int = 10,
+    value_range: tuple[float, float] = CCME_INDEX_RANGE,
+) -> dict[str, Any]:
+    """Compute reliability diagram data for continuous regression predictions.
+
+    Splits the prediction axis into ``n_bins`` equal-width bins, then for each
+    populated bin records the mean predicted value and the mean true value.  On a
+    perfectly calibrated model the two agree, so the curve lies on the diagonal.
+
+    Both axes are expressed in the original CCME index scale (not normalised to
+    [0, 1]) so the numbers in the diagram are directly interpretable.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        Ground-truth CCME_Values.
+    y_pred : array-like of shape (n_samples,)
+        Model predictions (clipped to ``value_range`` before binning).
+    n_bins : int, default 10
+        Number of equal-width bins covering ``value_range``.
+    value_range : tuple[float, float], default (0.0, 100.0)
+        (min, max) of the index used to define bin edges.
+
+    Returns
+    -------
+    dict
+        Keys:
+
+        - ``bin_edges``        : list of float — the n_bins + 1 bin boundary values.
+        - ``bin_centers``      : list of float — midpoint of each bin.
+        - ``mean_predicted``   : list of float | None — mean predicted value in each
+          bin; ``None`` for empty bins.
+        - ``mean_true``        : list of float | None — mean true value in each bin;
+          ``None`` for empty bins.
+        - ``bin_counts``       : list of int — number of samples in each bin.
+        - ``n_bins``           : int — number of bins requested.
+        - ``n_populated_bins`` : int — number of bins with at least one sample.
+        - ``calibration_gaps`` : list of float | None — ``mean_predicted - mean_true``
+          for each bin; positive means over-prediction, negative means
+          under-prediction, ``None`` for empty bins.
+
+    Notes
+    -----
+    Predictions outside ``value_range`` are clipped before binning.  Empty bins
+    appear as ``None`` rather than ``nan`` so callers can distinguish them from
+    numerically invalid results.
+    """
+    y_true = _to_array(y_true)
+    y_pred = _to_array(y_pred)
+    _validate_lengths(y_true, y_pred)
+    if n_bins < 1:
+        raise ValueError(f"n_bins must be at least 1; got {n_bins}.")
+
+    lo, hi = float(value_range[0]), float(value_range[1])
+    if lo >= hi:
+        raise ValueError(f"value_range must satisfy min < max; got {value_range}.")
+
+    # Clip predictions into the valid range before binning
+    y_pred_clipped = np.clip(y_pred, lo, hi)
+
+    edges = np.linspace(lo, hi, n_bins + 1)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+
+    mean_predicted: list[float | None] = []
+    mean_true: list[float | None] = []
+    bin_counts: list[int] = []
+    gaps: list[float | None] = []
+
+    for i in range(n_bins):
+        lo_b, hi_b = edges[i], edges[i + 1]
+        # Include the right edge only in the last bin to avoid gaps
+        if i < n_bins - 1:
+            mask = (y_pred_clipped >= lo_b) & (y_pred_clipped < hi_b)
+        else:
+            mask = (y_pred_clipped >= lo_b) & (y_pred_clipped <= hi_b)
+
+        n = int(mask.sum())
+        bin_counts.append(n)
+
+        if n == 0:
+            mean_predicted.append(None)
+            mean_true.append(None)
+            gaps.append(None)
+        else:
+            mp = float(np.mean(y_pred_clipped[mask]))
+            mt = float(np.mean(y_true[mask]))
+            mean_predicted.append(mp)
+            mean_true.append(mt)
+            gaps.append(mp - mt)
+
+    n_populated = sum(1 for c in bin_counts if c > 0)
+
+    return {
+        "bin_edges": edges.tolist(),
+        "bin_centers": centers.tolist(),
+        "mean_predicted": mean_predicted,
+        "mean_true": mean_true,
+        "bin_counts": bin_counts,
+        "n_bins": n_bins,
+        "n_populated_bins": n_populated,
+        "calibration_gaps": gaps,
+    }
+
+
+def expected_calibration_error(
+    y_true: Any,
+    y_pred: Any,
+    *,
+    n_bins: int = 10,
+    value_range: tuple[float, float] = CCME_INDEX_RANGE,
+    normalise: bool = True,
+) -> dict[str, float]:
+    """Compute Expected Calibration Error (ECE) and Maximum Calibration Error (MCE).
+
+    ECE is the sample-size-weighted mean of |mean_predicted - mean_true| across
+    populated bins.  MCE is the maximum such gap over populated bins.  Both
+    measure how well the model's predicted index values track the actual index
+    values across the prediction range.
+
+    When ``normalise=True`` (the default) both are expressed as a fraction of the
+    index range so they are comparable across different value ranges and models.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        Ground-truth CCME_Values.
+    y_pred : array-like of shape (n_samples,)
+        Model predictions.
+    n_bins : int, default 10
+        Number of equal-width bins.
+    value_range : tuple[float, float], default (0.0, 100.0)
+        (min, max) of the index used to define bin edges and for normalisation.
+    normalise : bool, default True
+        If True, divide ECE and MCE by the index range (hi - lo) so they are
+        dimensionless fractions in [0, 1].  If False, return raw index-point units.
+
+    Returns
+    -------
+    dict[str, float]
+        Keys:
+
+        - ``ece``              : Expected Calibration Error.
+        - ``mce``              : Maximum Calibration Error.
+        - ``mean_gap``         : Unweighted mean calibration gap across populated bins.
+        - ``n_bins``           : Number of bins used.
+        - ``n_populated_bins`` : Number of bins with at least one sample.
+        - ``n_samples``        : Total number of samples.
+        - ``normalised``       : Whether ECE and MCE are normalised by range.
+    """
+    y_true = _to_array(y_true)
+    y_pred = _to_array(y_pred)
+    _validate_lengths(y_true, y_pred)
+
+    rd = reliability_diagram_data(y_true, y_pred, n_bins=n_bins, value_range=value_range)
+
+    lo, hi = float(value_range[0]), float(value_range[1])
+    index_range = hi - lo  # 100.0 by default
+
+    n_total = len(y_true)
+    populated_abs_gaps: list[float] = []
+    weighted_gaps: float = 0.0
+
+    for i in range(n_bins):
+        gap = rd["calibration_gaps"][i]
+        if gap is None:
+            continue
+        n_bin = rd["bin_counts"][i]
+        abs_gap = abs(gap)
+        populated_abs_gaps.append(abs_gap)
+        weighted_gaps += (n_bin / n_total) * abs_gap
+
+    if not populated_abs_gaps:
+        ece = float("nan")
+        mce = float("nan")
+        mean_gap = float("nan")
+    else:
+        ece = weighted_gaps
+        mce = float(max(populated_abs_gaps))
+        mean_gap = float(np.mean(populated_abs_gaps))
+
+    if normalise and index_range > 0:
+        ece = ece / index_range if not (ece != ece) else float("nan")  # nan check
+        mce = mce / index_range if not (mce != mce) else float("nan")
+        mean_gap = mean_gap / index_range if not (mean_gap != mean_gap) else float("nan")
+
+    return {
+        "ece": ece,
+        "mce": mce,
+        "mean_gap": mean_gap,
+        "n_bins": n_bins,
+        "n_populated_bins": rd["n_populated_bins"],
+        "n_samples": n_total,
+        "normalised": normalise,
+    }
+
+
+def category_calibration_summary(
+    y_true: Any,
+    y_pred: Any,
+    *,
+    thresholds: dict[str, tuple[float, float]] | None = None,
+) -> dict[str, Any]:
+    """CCME-category–level calibration summary.
+
+    For each CCME WQI category (Poor / Marginal / Fair / Good / Excellent) this
+    function reports:
+      - The number of true samples in the category.
+      - The number of predicted samples assigned to the category.
+      - The fraction of true samples correctly classified into their category
+        (per-category recall / hit rate).
+      - The mean regression error (MAE) restricted to true samples in the category.
+      - The mean predicted index for samples whose true value is in the category.
+
+    This provides a richer picture than a single macro-F1: a model might be
+    well-calibrated on Excellent water (the dominant class, 35.9 % at ceiling)
+    but systematically misclassify Poor water, which is the operationally
+    critical failure mode.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        Ground-truth CCME_Values (continuous, 0–100 scale).
+    y_pred : array-like of shape (n_samples,)
+        Model predictions on the same scale.
+    thresholds : dict, optional
+        Custom category boundaries.  Defaults to the standard five-class CCME scheme.
+
+    Returns
+    -------
+    dict
+        ``{'categories': { <name>: { 'true_n', 'pred_n', 'hit_rate',
+           'mae', 'mean_pred', 'mean_true' } }, 'ordered_labels': [...],
+           'overall_category_accuracy': float}``
+    """
+    DEFAULT_THRESHOLDS: dict[str, tuple[float, float]] = {
+        "Poor": (0.0, 44.0),
+        "Marginal": (45.0, 64.0),
+        "Fair": (65.0, 79.0),
+        "Good": (80.0, 94.0),
+        "Excellent": (95.0, 100.0),
+    }
+    thresh = thresholds if thresholds is not None else DEFAULT_THRESHOLDS
+    ordered_labels = list(thresh.keys())
+
+    y_true_arr = _to_array(y_true)
+    y_pred_arr = _to_array(y_pred)
+    _validate_lengths(y_true_arr, y_pred_arr)
+
+    def _bin(values: np.ndarray) -> np.ndarray:
+        out = np.full(len(values), "Unknown", dtype=object)
+        for label, (lo, hi) in thresh.items():
+            out[(values >= lo) & (values <= hi)] = label
+        return out
+
+    true_cats = _bin(y_true_arr)
+    pred_cats = _bin(y_pred_arr)
+
+    total_correct = int(np.sum(true_cats == pred_cats))
+    overall_accuracy = float(total_correct / len(y_true_arr))
+
+    categories: dict[str, dict[str, float | int]] = {}
+    for label in ordered_labels:
+        true_mask = true_cats == label
+        pred_mask = pred_cats == label
+
+        true_n = int(true_mask.sum())
+        pred_n = int(pred_mask.sum())
+
+        if true_n > 0:
+            correct_in_cat = int(np.sum((true_cats == label) & (pred_cats == label)))
+            hit_rate = float(correct_in_cat / true_n)
+            mae_cat = float(np.mean(np.abs(y_true_arr[true_mask] - y_pred_arr[true_mask])))
+            mean_pred = float(np.mean(y_pred_arr[true_mask]))
+            mean_true = float(np.mean(y_true_arr[true_mask]))
+        else:
+            hit_rate = float("nan")
+            mae_cat = float("nan")
+            mean_pred = float("nan")
+            mean_true = float("nan")
+
+        categories[label] = {
+            "true_n": true_n,
+            "pred_n": pred_n,
+            "hit_rate": hit_rate,
+            "mae": mae_cat,
+            "mean_pred": mean_pred,
+            "mean_true": mean_true,
+        }
+
+    return {
+        "categories": categories,
+        "ordered_labels": ordered_labels,
+        "overall_category_accuracy": overall_accuracy,
+    }
+
+
+def calibration_summary(
+    y_true: Any,
+    y_pred: Any,
+    *,
+    n_bins: int = 10,
+    value_range: tuple[float, float] = CCME_INDEX_RANGE,
+    thresholds: dict[str, tuple[float, float]] | None = None,
+) -> dict[str, Any]:
+    """Full calibration summary for a single model's predictions.
+
+    Convenience wrapper that runs the complete Phase 2 calibration suite in one
+    call and returns a nested dict suitable for logging to a CSV or for display
+    in a notebook.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        Ground-truth CCME_Values.
+    y_pred : array-like of shape (n_samples,)
+        Model predictions.
+    n_bins : int, default 10
+        Number of equal-width bins for the reliability diagram and ECE.
+    value_range : tuple[float, float], default (0.0, 100.0)
+        Index range for bin definition and ECE normalisation.
+    thresholds : dict, optional
+        Custom CCME category boundaries.
+
+    Returns
+    -------
+    dict
+        ``{'ece_metrics': {...}, 'reliability_diagram': {...},
+           'category_calibration': {...}, 'regression_metrics': {...}}``
+
+        All sub-dicts are the outputs of their respective functions.
+    """
+    y_true = _to_array(y_true)
+    y_pred = _to_array(y_pred)
+    _validate_lengths(y_true, y_pred)
+
+    return {
+        "regression_metrics": regression_metrics(y_true, y_pred),
+        "ece_metrics": expected_calibration_error(
+            y_true, y_pred, n_bins=n_bins, value_range=value_range
+        ),
+        "reliability_diagram": reliability_diagram_data(
+            y_true, y_pred, n_bins=n_bins, value_range=value_range
+        ),
+        "category_calibration": category_calibration_summary(y_true, y_pred, thresholds=thresholds),
     }

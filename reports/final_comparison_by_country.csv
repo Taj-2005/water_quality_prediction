@@ -1,0 +1,5 @@
+Country,sample_count,XGBoost_mae,XGBoost_rmse,XGBoost_p95_ae,XGBoost_max_ae,Tuned MLP_mae,Tuned MLP_rmse,Tuned MLP_p95_ae,Tuned MLP_max_ae,delta_rmse (m2 - m1),best_model
+Canada,584,0.632,1.9321,6.099,10.8929,3.2699,4.6498,9.7333,23.0439,2.7177,XGBoost
+England,319184,0.2416,0.6388,0.956,13.6451,1.2023,1.7515,3.6181,27.4728,1.1128,XGBoost
+Ireland,35249,0.0576,0.2757,0.1828,9.7521,0.8966,1.5051,3.4454,19.1781,1.2294,XGBoost
+USA,60787,0.1157,0.5166,0.4986,9.0077,0.8266,1.3496,3.0542,16.8753,0.833,XGBoost

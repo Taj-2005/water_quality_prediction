@@ -1,0 +1,6 @@
+check_id,description,component,status,details
+CHK_01_ROW_DISJOINTNESS,"Zero row overlap across train, val, and test splits",src.split / splits.parquet,PASSED,"Train=1,986,397, Val=415,805, Test=415,804. Overlaps: Tr-Va=0, Tr-Te=0, Va-Te=0."
+CHK_02_SCALER_FIT_ISOLATION,Preconditioning transformers fitted strictly on training partition,src.dl.nn_preprocess,PASSED,"Fitted on n=10,000 train rows. Transforming validation / test data produces zero mutation to learned quantiles or reference thresholds."
+CHK_03_TARGET_STATS_ISOLATION,Target standardization mean and std computed strictly from y_train,src.dl.data / LoadersBundle,PASSED,"y_mean=85.1380, y_std=17.2453 learned from train partition only. Holdout targets are standardized and unscaled using train statistics."
+CHK_04_SPATIAL_GROUP_ISOLATION,GroupKFold by monitoring station (Area) prevents site identity leakage,src.dl.hybrid,PASSED,Tested across 5 folds. Overlapping monitoring stations between training and OOF: 0. Fails fast via RuntimeError on any station alignment mismatch.
+CHK_05_FORBIDDEN_FORMULA_FEATURES,Direct mathematical formula components and target labels strictly excluded,src.features,PASSED,Audited features against 10 formula/label components. Forbidden columns present: None. Only documented 8 inputs used.

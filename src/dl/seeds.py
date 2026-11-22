@@ -28,6 +28,7 @@ def set_seed(seed: int = SEED, deterministic: bool = True) -> None:
     deterministic : bool, default True
         Whether to configure PyTorch for deterministic algorithms where practical.
     """
+    seed = int(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
