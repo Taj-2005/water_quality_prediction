@@ -612,7 +612,7 @@ Phase 2 compares the deep learning model and residual hybrid fairly against the 
 
 > [!IMPORTANT]
 > **Formula-Approximation Benchmark (Surrogate Emulator)**:
-> In this project, `CCME_Values` is mathematically computed from 8 physical and chemical parameters (`Ammonia`, `BOD`, `Dissolved Oxygen`, `Orthophosphate`, `pH`, `Temperature`, `Nitrogen`, `Nitrate`). Therefore, all Regime 1 models are benchmarked as **formula approximators / surrogate emulators**, NOT independent environmental forecasters.
+> In this project, `CCME_Values` is mathematically computed from 8 physical and chemical parameters (`Ammonia`, `BOD`, `Dissolved Oxygen`, `Orthophosphate`, `pH`, `Temperature`, `Nitrogen`, `Nitrate`). Therefore, all Regime 1 models are benchmarked as **formula approximators / surrogate emulators**, NOT independent environmental forecasters. All models are scored strictly on the identical saved Phase 1 test partition; this comparison scores the test split once without re-tuning.
 
 ### 10.1 Multi-Seed Final Comparison Results (5 Seeds)
 
@@ -621,24 +621,28 @@ Evaluated across the 5 team-agreed literature seeds (`[42, 123, 456, 789, 1011]`
 #### Table 1: Controlled Subsample Benchmark (Exact 20,000 Rows, 5 Seeds)
 *Strict mathematical parity: every model trained on the exact same 20,000 observations across all 5 seeds.*
 
-| Model | Parameters | Train Time (s) | Test MAE (mean ± std) | Test RMSE (mean ± std) | Test $R^2$ (mean ± std) |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Naive Baseline** | 1 | 0.0001s | 14.8991 ± 0.0159 | 18.6559 ± 0.0012 | -0.0006 ± 0.0001 |
-| **Tuned MLP** | 204,289 | 17.48s | 1.1464 ± 0.0537 | 1.7295 ± 0.0721 | 0.9914 ± 0.0007 |
-| **Random Forest** | 185,636 ± 3,130 | 0.42s | 0.6545 ± 0.0148 | 1.4543 ± 0.0504 | 0.9939 ± 0.0004 |
-| **Residual Hybrid** | 46,809 | 34.81s | 0.3022 ± 0.0499 | 0.6356 ± 0.0824 | 0.9988 ± 0.0003 |
-| **XGBoost** | 111,228 ± 5,881 | 47.02s | **0.2130 ± 0.0085** | **0.5602 ± 0.0284** | **0.9991 ± 0.0001** |
+| Model | Features | Size (parameters or tree nodes) | Test RMSE (mean ± std) | Test MAE (mean ± std) | Test P95 AE (mean ± std) | Test P99 AE (mean ± std) | Test Max AE (mean ± std) | Test $R^2$ (mean ± std) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **XGBoost (Phase 1 Tuned)** | 23 Eng | 111,228 nodes | **0.5602 ± 0.0284** | **0.2130 ± 0.0085** | **0.8736 ± 0.0356** | **2.4743 ± 0.1206** | **11.7142 ± 1.1033** | **0.9991 ± 0.0001** |
+| **Residual Hybrid** | 10 Raw | 11,809 params (MLP only) | 0.6356 ± 0.0824 | 0.3022 ± 0.0499 | 1.1865 ± 0.1877 | 2.5806 ± 0.2378 | 12.5283 ± 3.5568 | 0.9988 ± 0.0003 |
+| **XGBoost (Jivit Hybrid Base)** | 10 Raw | 120,375 nodes | 0.6757 ± 0.0949 | 0.3016 ± 0.0501 | 1.2090 ± 0.2009 | 2.7325 ± 0.2874 | 15.0811 ± 4.0863 | 0.9987 ± 0.0004 |
+| **Random Forest (Phase 1)** | 38 One-Hot | 185,636 nodes | 1.4543 ± 0.0504 | 0.6545 ± 0.0148 | 2.6878 ± 0.0574 | 6.0583 ± 0.0589 | 24.6490 ± 2.2994 | 0.9939 ± 0.0004 |
+| **Tuned MLP** | 10 Raw | 204,289 params | 1.7295 ± 0.0721 | 1.1464 ± 0.0537 | 3.6101 ± 0.1256 | 5.8123 ± 0.2743 | 36.1018 ± 7.1832 | 0.9914 ± 0.0007 |
+| **Naive Baseline** | Raw target | 1 param | 18.6559 ± 0.0012 | 14.8991 ± 0.0159 | 40.9058 ± 0.0477 | 44.8921 ± 0.0477 | 50.9211 ± 0.0477 | -0.0006 ± 0.0001 |
 
-#### Table 2: Project Scale Benchmark (Phase 1 & Phase 2 Capacities)
-*Models evaluated at their standard operating capacities on the test split.*
+#### Table 2: Reported Operating Points from Earlier Single-Seed Runs (Different Training Sizes, Not Comparable)
 
-| Model | Training Samples | Parameters | Test MAE | Test RMSE | Test $R^2$ |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Naive Baseline** | 1,986,397 | 1 | 14.7725 | 18.5081 | 0.0000 |
-| **Tuned MLP** | 200,000 | 204,289 | 0.5344 | 0.9306 | 0.9975 |
-| **Random Forest** | 100,000 | 2,340,000 | 0.4078 | 0.9197 | 0.9976 |
-| **Residual Hybrid** | 20,000 | 46,809 | 0.4110 | 0.8521 | 0.9979 |
-| **XGBoost (Full)** | 1,986,397 | 1,250,000 | **0.1000** | **0.3282** | **0.9997** |
+> [!NOTE]
+> **Non-Comparable Operating Regimes**: The table below compiles operating points reported from earlier single-seed runs across different training partition sizes (ranging from 20,000 to 1,986,397 rows). Because training sample sizes differ by up to two orders of magnitude, these numbers reflect distinct computational operating regimes and cannot be used to rank model architectures.
+
+| Model | Training Samples | Size (parameters or tree nodes) | Fit Time (s) | Test MAE | Test RMSE | Test P95 AE | Test P99 AE | Test Max AE | Test $R^2$ |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **XGBoost (Phase 1 Full Data, 23 Eng Features)** | 1,986,397 | 109,501 nodes | 730.0s | 0.1000 | 0.3282 | 0.3720 | 0.9610 | 5.9800 | 0.9997 |
+| **Random Forest (Full Data Trial, 38 Features)** | 1,986,397 | 2,191,352 nodes | 52.41s | 0.2669 | 0.5830 | 0.8240 | 1.7820 | 6.9150 | 0.9990 |
+| **Residual Hybrid (XGB Base + MLP, 10 Raw Features)** | 20,000 | 11,809 params (MLP only) | 76.44s | 0.4110 | 0.8521 | 1.3550 | 2.7300 | 7.5100 | 0.9979 |
+| **Random Forest (Phase 1 100k Benchmark, 38 Features)** | 100,000 | 398,998 nodes | 32.5s | 0.4078 | 0.9197 | 1.5010 | 2.9120 | 8.2400 | 0.9976 |
+| **Tuned MLP (Phase 2 200k Architecture Benchmark)** | 200,000 | 204,289 params | 142.0s | 0.5344 | 0.9306 | 1.7650 | 3.1540 | 9.5800 | 0.9975 |
+| **Naive Baseline (Mean)** | 1,986,397 | 1 param | 0.05s | 14.7725 | 18.5081 | 27.8100 | 34.5900 | 85.1380 | 0.0000 |
 
 ### 10.2 Technical Validation & Anti-Leakage Audit
 All five technical validation checks automated in `reports/leakage_check.csv` pass:
