@@ -341,6 +341,7 @@ def permutation_feature_importance_mlp(
     y_np = _to_numpy(y)
 
     if metric_fn is None:
+
         def eval_metric(yt: np.ndarray, yp: np.ndarray) -> float:
             return float(np.mean(np.abs(yt - yp)))
     else:
@@ -379,11 +380,13 @@ def permutation_feature_importance_mlp(
             # Importance = error increase after corrupting feature
             scores.append(perm_score - baseline_score)
 
-        importance_records.append({
-            "Feature": feature_names[col_idx],
-            "Importance_Mean": float(np.mean(scores)),
-            "Importance_Std": float(np.std(scores, ddof=1) if len(scores) > 1 else 0.0),
-        })
+        importance_records.append(
+            {
+                "Feature": feature_names[col_idx],
+                "Importance_Mean": float(np.mean(scores)),
+                "Importance_Std": float(np.std(scores, ddof=1) if len(scores) > 1 else 0.0),
+            }
+        )
 
     df = pd.DataFrame(importance_records).sort_values("Importance_Mean", ascending=False)
     df.reset_index(drop=True, inplace=True)

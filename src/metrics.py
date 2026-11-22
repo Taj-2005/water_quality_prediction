@@ -601,9 +601,7 @@ def expected_calibration_error(
     y_pred = _to_array(y_pred)
     _validate_lengths(y_true, y_pred)
 
-    rd = reliability_diagram_data(
-        y_true, y_pred, n_bins=n_bins, value_range=value_range
-    )
+    rd = reliability_diagram_data(y_true, y_pred, n_bins=n_bins, value_range=value_range)
 
     lo, hi = float(value_range[0]), float(value_range[1])
     index_range = hi - lo  # 100.0 by default
@@ -793,7 +791,5 @@ def calibration_summary(
         "reliability_diagram": reliability_diagram_data(
             y_true, y_pred, n_bins=n_bins, value_range=value_range
         ),
-        "category_calibration": category_calibration_summary(
-            y_true, y_pred, thresholds=thresholds
-        ),
+        "category_calibration": category_calibration_summary(y_true, y_pred, thresholds=thresholds),
     }

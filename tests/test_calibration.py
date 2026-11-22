@@ -181,7 +181,15 @@ class TestExpectedCalibrationError:
     def test_returns_correct_keys(self):
         y_true, y_pred = _ccme_range_data()
         result = expected_calibration_error(y_true, y_pred)
-        for key in ("ece", "mce", "mean_gap", "n_bins", "n_populated_bins", "n_samples", "normalised"):
+        for key in (
+            "ece",
+            "mce",
+            "mean_gap",
+            "n_bins",
+            "n_populated_bins",
+            "n_samples",
+            "normalised",
+        ):
             assert key in result
 
     def test_perfect_model_gives_zero_ece(self):
@@ -219,8 +227,12 @@ class TestExpectedCalibrationError:
 
     def test_normalised_flag_false_gives_index_points(self):
         y_true, y_pred = _ccme_range_data(200)
-        r_norm = expected_calibration_error(y_true, y_pred, normalise=True, value_range=(0.0, 100.0))
-        r_raw = expected_calibration_error(y_true, y_pred, normalise=False, value_range=(0.0, 100.0))
+        r_norm = expected_calibration_error(
+            y_true, y_pred, normalise=True, value_range=(0.0, 100.0)
+        )
+        r_raw = expected_calibration_error(
+            y_true, y_pred, normalise=False, value_range=(0.0, 100.0)
+        )
         assert r_raw["normalised"] is False
         if not (math.isnan(r_norm["ece"]) or math.isnan(r_raw["ece"])):
             assert r_raw["ece"] == pytest.approx(r_norm["ece"] * 100.0, rel=1e-9)
@@ -243,8 +255,8 @@ class TestExpectedCalibrationError:
 
     def test_ece_manual_single_bin(self):
         """With n_bins=1 the ECE equals |mean_pred - mean_true| / range."""
-        y_true = np.array([40.0, 60.0, 80.0])   # mean = 60
-        y_pred = np.array([50.0, 70.0, 90.0])   # mean = 70; gap = 10
+        y_true = np.array([40.0, 60.0, 80.0])  # mean = 60
+        y_pred = np.array([50.0, 70.0, 90.0])  # mean = 70; gap = 10
         result = expected_calibration_error(
             y_true, y_pred, n_bins=1, normalise=True, value_range=(0.0, 100.0)
         )
@@ -359,7 +371,12 @@ class TestCalibrationSummary:
     def test_returns_all_top_level_keys(self):
         y_true, y_pred = _ccme_range_data()
         result = calibration_summary(y_true, y_pred)
-        for key in ("regression_metrics", "ece_metrics", "reliability_diagram", "category_calibration"):
+        for key in (
+            "regression_metrics",
+            "ece_metrics",
+            "reliability_diagram",
+            "category_calibration",
+        ):
             assert key in result
 
     def test_regression_metrics_matches_standalone(self):
