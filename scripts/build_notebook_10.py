@@ -41,7 +41,7 @@ def create_notebook() -> nbformat.NotebookNode:
 
 > [!IMPORTANT]
 > **Mandatory Benchmark Disclosure:**  
-> `CCME_Values` is an index computed deterministically from 8 water quality parameters. Consequently, all evaluations presented herein are **formula-approximation benchmarks**, not predictions of unobserved physical phenomena. All models are scored strictly on the identical saved Phase 1 test partition, which was evaluated strictly once at the end of experimentation without re-tuning.
+> `CCME_Values` is an index computed deterministically from 8 water quality parameters. Consequently, all evaluations presented herein are **formula-approximation benchmarks**, not predictions of unobserved physical phenomena. All models are scored strictly on the identical saved Phase 1 test partition; this comparison scores the test split once without re-tuning.
 """
         )
     )
@@ -65,14 +65,17 @@ print("Figures directory:", FIGURES.resolve())
     # Cell 3: Executive Summary Markdown
     cells.append(
         new_markdown_cell(
-            """## 1. Executive Summary: Multi-Seed Benchmark Evaluation
+            """## 1. Multi-Seed Benchmark Evaluation
 
-To provide a 100% fair and rigorous comparison between tree ensembles, standalone deep learning architectures, and residual hybrid models, we evaluate two structured benchmarks:
+To provide a fair and rigorous comparison between tree ensembles, standalone deep learning architectures, and residual hybrid models, we evaluate two structured benchmarks:
 
 1. **Table 1: Controlled Comparison Benchmark (Exact 20,000 samples, 5 seeds)**  
-   *Every single model* is trained on the exact identical 20,000-sample training slice using the identical 5 seeds (`[42, 123, 456, 789, 1011]`). This eliminates training sample size confounding and matches Jivit's hybrid ablation scale.
-2. **Table 2: Project Scale Benchmark (Full Project Capacity)**  
-   Models evaluated at their standard project scale: Naive and XGBoost on the full training set (1,986,397 rows), Random Forest at 100k rows (Phase 1 compute-capped), Tuned MLP at 200k rows (Himanshu Step 3 architecture benchmark), and Hybrid at 20k rows.
+   *Every single model* is trained on the exact identical 20,000-sample training slice across all 5 seeds (`[42, 123, 456, 789, 1011]`). This eliminates sample size confounding and matches Jivit's hybrid ablation scale. To ensure complete clarity, both XGBoost configurations are evaluated:
+   - **XGBoost (Phase 1 Tuned, 23 Eng Features)**: Uses Phase 1 Optuna hyperparameters (`learning_rate=0.0552, max_depth=7, min_child_weight=30, reg_lambda=33.12`) on 23 engineered features (ratios and log transforms).
+   - **XGBoost (Jivit Hybrid Base, 10 Raw Features)**: Uses the base XGBoost configuration from `src/dl/hybrid.py` (`learning_rate=0.1, max_depth=8, min_child_weight=5, reg_lambda=1.0`) on the 10 raw features without feature engineering.
+
+2. **Table 2: Reported Operating Points from Earlier Single-Seed Runs (Different Training Sizes, Not Comparable)**  
+   Operating points reported from earlier single-seed experiments across different training partition sizes (ranging from 20,000 to 1,986,397 rows). Because training sample sizes differ by up to two orders of magnitude, these numbers reflect distinct computational operating regimes and cannot be used to rank model architectures.
 """
         )
     )
@@ -87,6 +90,7 @@ ctrl_cols = [
     "model", "training_samples", "n_seeds", 
     "test_rmse_mean", "test_rmse_std", 
     "test_mae_mean", "test_mae_std", 
+    "test_p95_ae_mean", "test_p99_ae_mean", "test_max_ae_mean",
     "test_r2_mean", "test_r2_std", 
     "fit_time_s_mean"
 ]
@@ -98,6 +102,9 @@ display(ctrl_summary.style.format({
     "test_rmse_std": "±{:.4f}",
     "test_mae_mean": "{:.4f}",
     "test_mae_std": "±{:.4f}",
+    "test_p95_ae_mean": "{:.4f}",
+    "test_p99_ae_mean": "{:.4f}",
+    "test_max_ae_mean": "{:.4f}",
     "test_r2_mean": "{:.4f}",
     "test_r2_std": "±{:.4f}",
     "fit_time_s_mean": "{:.2f}s",
@@ -110,19 +117,25 @@ display(ctrl_summary.style.format({
     # Cell 5: Table 2 Code
     cells.append(
         new_code_cell(
-            """# Table 2: Project Scale Benchmark (Full Capacity)
+            """# Table 2: Reported Operating Points from Earlier Single-Seed Runs (Different Training Sizes, Not Comparable)
+size_col = "size (parameters or tree nodes)_mean" if "size (parameters or tree nodes)_mean" in df_summary.columns else "n_params_mean"
 scale_cols = [
-    "model", "training_samples", "test_rmse_mean", "test_mae_mean", 
-    "test_r2_mean", "n_params_mean", "fit_time_s_mean"
+    "model", "training_samples", size_col,
+    "test_rmse_mean", "test_mae_mean",
+    "test_p95_ae_mean", "test_p99_ae_mean", "test_max_ae_mean",
+    "test_r2_mean", "fit_time_s_mean"
 ]
-scale_summary = df_summary[df_summary["benchmark"] == "project_scale"][scale_cols].sort_values("test_rmse_mean")
-print("=== TABLE 2: PROJECT SCALE BENCHMARK (Capacity Scale) ===")
+scale_summary = df_summary[df_summary["benchmark"] == "reported_operating_points_not_comparable"][scale_cols].sort_values("test_rmse_mean")
+print("=== TABLE 2: REPORTED OPERATING POINTS FROM EARLIER SINGLE-SEED RUNS (DIFFERENT TRAINING SIZES, NOT COMPARABLE) ===")
 print("Disclosure: formula-approximation benchmark (CCME_Values computed from 8 input parameters)")
 display(scale_summary.style.format({
     "test_rmse_mean": "{:.4f}",
     "test_mae_mean": "{:.4f}",
+    "test_p95_ae_mean": "{:.4f}",
+    "test_p99_ae_mean": "{:.4f}",
+    "test_max_ae_mean": "{:.4f}",
     "test_r2_mean": "{:.4f}",
-    "n_params_mean": "{:,.0f}",
+    size_col: "{:,.0f}",
     "fit_time_s_mean": "{:.2f}s",
     "training_samples": "{:,}"
 }))
@@ -135,7 +148,7 @@ display(scale_summary.style.format({
         new_markdown_cell(
             """### Visual Performance Comparison
 
-The figure below illustrates the test RMSE and $R^2$ scores across models under the controlled 20k benchmark and project scale conditions.
+The figures below illustrate the test RMSE and $R^2$ scores across models under the controlled 20k benchmark.
 """
         )
     )
@@ -163,7 +176,7 @@ Below are the per-seed runs demonstrating the variance and stability across seed
         new_code_cell(
             """df_raw = pd.read_csv(REPORTS / "final_comparison.csv")
 ctrl_raw = df_raw[df_raw["benchmark"] == "controlled_20k"][
-    ["seed", "model", "test_rmse", "test_mae", "test_r2", "fit_time_s"]
+    ["seed", "model", "test_rmse", "test_mae", "test_p95_ae", "test_p99_ae", "test_max_ae", "test_r2", "fit_time_s"]
 ].sort_values(["model", "seed"])
 display(ctrl_raw)
 """
@@ -173,9 +186,9 @@ display(ctrl_raw)
     # Cell 8: Error Breakdown Markdown & Code
     cells.append(
         new_markdown_cell(
-            """## 3. Fine-Grained Error Breakdown (Top 2 Models: XGBoost vs Tuned MLP)
+            """## 3. Fine-Grained Error Breakdown (Top 2 Models: XGBoost Tuned vs Tuned MLP)
 
-To understand where the deep neural network excels and where tree ensembles dominate, we examine the grouped test residuals across geographic countries and top monitoring station areas.
+To understand where individual models perform best, we examine the grouped test residuals across geographic countries and top monitoring station areas.
 """
         )
     )
@@ -209,16 +222,20 @@ if fig_area.exists():
         new_markdown_cell(
             """### Analytical Reading: When Does the MLP Beat Trees, and When Does It Not?
 
-Based strictly on empirical evidence from our benchmarks:
+Based strictly on the empirical values in the benchmark tables:
 
-1. **Where Tree Ensembles (XGBoost) Dominate:**
-   * **Axis-Aligned Threshold Discontinuities:** The CCME water quality index is computed from conditional formulas with sharp mathematical thresholds (e.g., pH bounds, objective excursions). XGBoost creates exact axis-orthogonal splits at these thresholds, achieving an extraordinary test RMSE of **0.3282** ($R^2 = 0.9997$) at full scale and **0.5602** on 20k rows.
-   * **Smooth Approximator Rounding:** The Tuned MLP, using smooth GELU activations, must approximate sharp step-functions via smooth sigmoidal transitions, resulting in rounding errors near threshold boundaries (test RMSE **0.9306** at 200k scale; **1.7295** at 20k scale).
-   * **Sample Efficiency:** On tabular continuous data, XGBoost requires significantly fewer samples to isolate sub-regions of feature space, outperforming the MLP in all 4 countries and all top 10 monitoring stations.
+1. **Test Error Comparisons (Table 1: Controlled 20,000 Rows):**
+   * **Standalone Accuracy:** Standalone XGBoost (Phase 1 Tuned, 23 Eng Features) achieves the lowest error across all metrics on the 20k-row sample: Test RMSE of **0.5602**, MAE of **0.2130**, P95 absolute error of **0.8736**, P99 of **2.4743**, and Max absolute error of **11.7142** ($R^2 = 0.9991$).
+   * **Comparison on Raw 10 Features:** When evaluated on identical 10 raw features without engineered ratios or log transforms:
+     - Standalone XGBoost Base scores Test RMSE **0.6757**, MAE **0.3016**, P95 **1.2090**, and Max **15.0811**.
+     - Standalone Tuned MLP scores Test RMSE **1.7295**, MAE **1.1464**, P95 **3.6101**, and Max **36.1018**.
+     - Standalone Random Forest scores Test RMSE **1.4543**, MAE **0.6545**, P95 **2.6878**, and Max **24.6490**.
+     - Standalone MLP does not beat XGBoost or Random Forest in RMSE, MAE, or tail percentiles on tabular CCME approximation.
+   * **Hybrid Residual Correction on Raw Features:** When XGBoost Base is combined with a residual MLP (the Hybrid model, 10 raw features), the residual MLP reduces error relative to standalone XGBoost Base: Test RMSE decreases from **0.6757** to **0.6356**, and P95 absolute error improves from **1.2090** to **1.1865** (P99 from **2.7325** to **2.5806**, Max from **15.0811** to **12.5283**). However, standalone XGBoost with Phase 1 feature engineering (23 features) remains superior across all error metrics (RMSE **0.5602**, P95 **0.8736**).
 
-2. **Where Deep Learning & Hybridization Win:**
-   * **Residual Modeling on Outliers:** When XGBoost is paired with a residual MLP (the Hybrid architecture), the neural network models the error surface that tree splitting leaves behind. The Hybrid achieves an outstanding test RMSE of **0.6356** on 20k rows, penalizing tail errors effectively via its smooth L2 loss.
-   * **Inference Throughput at Production Scale:** As shown in Section 5 below, the Tuned MLP executes vectorized matrix multiplications in PyTorch CPU BLAS **7.5× faster** than XGBoost (0.208s vs 1.577s per 100k rows), making it the superior architecture when ultra-low inference latency is demanded.
+2. **Inference Throughput and Parameter Footprint (Table 4: Compute Cost Profiling):**
+   * **Inference Speed:** The Tuned MLP executes inference on CPU at **0.1882s per 100k rows** via vectorized PyTorch BLAS matrix multiplications, which is **8.9× faster** than XGBoost (**1.6714s per 100k rows**) and **20.3× faster** than full Random Forest (**3.8200s per 100k rows**).
+   * **Model Footprint:** The Tuned MLP comprises **204,289 parameters**, while Random Forest comprises **2,191,352 tree nodes** at full scale (398,998 at 100k scale) and XGBoost comprises **109,501 tree nodes**. The Hybrid architecture contains an MLP of **11,809 parameters** (its tree node count is separate).
 """
         )
     )
@@ -228,7 +245,7 @@ Based strictly on empirical evidence from our benchmarks:
         new_markdown_cell(
             r"""## 4. Technical Validation: Anti-Leakage Audit
 
-To guarantee the integrity of all Phase 2 conclusions, we run a rigorous 5-point data leakage and isolation audit:
+To guarantee the integrity of all Phase 2 conclusions, we run a 5-point data leakage and isolation audit:
 1. **Scaler Isolation (`LEAK-01`):** Feature scalers (`QuantileTransformer`, `StandardScaler`) fitted strictly on training data; val/test transforms leave quantile arrays strictly unchanged.
 2. **Target Isolation (`LEAK-02`):** Target standardization statistics ($\mu_y, \sigma_y$) computed strictly on `train` indices.
 3. **Partition Disjointness (`LEAK-03`):** Train, validation, and test index sets have zero intersection.
@@ -252,7 +269,7 @@ print("All anti-leakage audits PASSED successfully.")
         new_markdown_cell(
             """## 5. Technical Validation: Compute Cost & Operational Profiling
 
-Measured parameter counts, training wall-clock times, and inference throughput (per 100,000 samples) benchmarked on Apple Silicon CPU.
+Measured parameter counts, tree node counts, training wall-clock times, and inference throughput (per 100,000 samples) benchmarked on Apple Silicon CPU.
 """
         )
     )
@@ -260,18 +277,6 @@ Measured parameter counts, training wall-clock times, and inference throughput (
         new_code_cell(
             """df_cost = pd.read_csv(REPORTS / "compute_cost.csv")
 display(df_cost)
-"""
-        )
-    )
-
-    # Cell 12: Final Conclusion Markdown
-    cells.append(
-        new_markdown_cell(
-            """## 6. Final Recommendations for Phase 3 Production
-
-* **Primary Analytical Engine:** XGBoost remains the highest-accuracy standalone model on formula approximation ($R^2 > 0.999$).
-* **Low-Latency Edge Deployment:** Tuned MLP offers 7.5× lower inference latency per 100k rows with $R^2 = 0.9975$.
-* **Champion Architecture:** The XGBoost + Residual MLP Hybrid provides the strongest variance reduction and tail-error penalization.
 """
         )
     )
