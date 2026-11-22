@@ -36,6 +36,38 @@ def test_agreed_seeds():
     assert hybrid.AGREED_SEEDS == [42, 123, 456, 789, 1011]
 
 
+def test_committed_hybrid_results_have_no_stub_backend():
+    """Committed hybrid evidence must not mix obsolete sklearn stub runs."""
+    results_path = Path("reports/hybrid_results.csv")
+    if not results_path.exists():
+        pytest.skip("Committed hybrid results are unavailable")
+    results = pd.read_csv(results_path)
+    assert "sklearn_stub" not in set(results["mlp_backend"].astype(str))
+    assert set(results["mlp_backend"].astype(str)) == {"pytorch"}
+
+
+def test_result_logger_rejects_stub_backend(tmp_path: Path):
+    """The result logger must refuse incompatible non-PyTorch backend artifacts."""
+    result = {
+        "config": {
+            "timestamp": "2026-11-22T00:00:00+00:00",
+            "regime": 1,
+            "partial_scenario": "8/8",
+            "n_folds": 5,
+            "seed": 42,
+            "n_train": 20000,
+            "n_features": 10,
+            "mlp_backend": "sklearn_stub",
+        },
+        "timing_seconds": 1.0,
+        "xgb_test_metrics": {},
+        "hybrid_test_metrics": {},
+        "hybrid_val_metrics": {},
+    }
+    with pytest.raises(ValueError, match="non-PyTorch"):
+        hybrid._save_results(result, tmp_path / "hybrid_results.csv")
+
+
 def test_oof_group_leakage_zero_overlap():
     """GroupKFold must guarantee zero Area overlap between train folds and holdout folds."""
     from sklearn.model_selection import GroupKFold

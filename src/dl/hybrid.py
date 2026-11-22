@@ -803,6 +803,10 @@ def _save_results(result: dict, path: Path) -> None:
     """Append one result record to the hybrid results CSV."""
     path.parent.mkdir(parents=True, exist_ok=True)
     cfg = result["config"]
+    if cfg["mlp_backend"] != "pytorch":
+        raise ValueError(
+            f"Refusing to record non-PyTorch hybrid result: {cfg['mlp_backend']}"
+        )
     row = {
         "timestamp": cfg["timestamp"],
         "regime": cfg["regime"],
