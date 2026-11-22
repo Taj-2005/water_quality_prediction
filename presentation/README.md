@@ -1,4 +1,4 @@
-# Phase 1 presentation
+# Presentations
 
 Owner: **Satya Yadav**. Each member presents their own slides, so Satya keeps the style
 consistent and sets the order.
@@ -6,10 +6,11 @@ consistent and sets the order.
 | File | Contents |
 | :--- | :--- |
 | `phase1_presentation.pdf` | The current deck, 7 slides. Previously `water_quality_prediction_presentation_v2.pdf` in the repository root |
+| `phase2_presentation.pdf` | Phase 2 deck: deep learning, tree ensembles, and residual hybrid results |
 
-The source lives outside the repository; only the exported PDF is committed. Re-export
-to this same filename so the path stays stable — version numbers in filenames mean every
-revision breaks the links that point at it.
+The Phase 1 source lives outside the repository; only its exported PDF is committed.
+The Phase 2 presentation was supplied as a PDF. Keep these stable filenames so links do
+not break when a deck is revised.
 
 ## Keeping the deck and the report in step
 

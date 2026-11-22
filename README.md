@@ -27,6 +27,7 @@ leakage-safe split.
 - **Formal Academic Deliverables**:
   - **IEEE Conference Report**: Full 8-page paper compiled at [report/water_quality_prediction_phase1_report.pdf](report/water_quality_prediction_phase1_report.pdf).
   - **Presentation Deck**: 7-slide presentation committed at [presentation/phase1_presentation.pdf](presentation/phase1_presentation.pdf).
+  - **Phase 2 Presentation Deck**: [presentation/phase2_presentation.pdf](presentation/phase2_presentation.pdf).
   - **Viva Preparation**: 77 defense questions across 9 areas in [docs/viva_prep.md](docs/viva_prep.md) and rehearsal schedule in [docs/mock_viva_plan.md](docs/mock_viva_plan.md).
 - **Next Phase**: **Phase 2 (Deep Learning / PyTorch MLP)** on the identical split, preprocessing, and evaluation contracts.
 
@@ -176,7 +177,8 @@ water_quality_prediction/
 ├── report/                      # IEEE LaTeX source; make_tables.py generates tables
 │   └── water_quality_prediction_phase1_report.pdf
 ├── presentation/
-│   └── phase1_presentation.pdf  # Phase 1 deck
+│   ├── phase1_presentation.pdf  # Phase 1 deck
+│   └── phase2_presentation.pdf  # Phase 2 deck
 ├── docs/
 │   ├── target_definition.md     # target, CCME formula, leakage analysis
 │   ├── data_dictionary.md       # every column + the upstream-imputation finding

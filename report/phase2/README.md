@@ -3,8 +3,9 @@
 The IEEE conference-format report is built from `main.tex` and summarizes Phase 1
 context plus saved Phase 2 evidence for neural input conditioning, regularization,
 architecture selection, residual hybrid evaluation, a five-seed model comparison,
-leakage checks, subgroup error summaries, and compute cost. The companion presentation
-is `water_quality_prediction_phase2_presentation.pdf`.
+leakage checks, subgroup error summaries, and compute cost. The companion deck is
+stored with the other project presentations at
+[`presentation/phase2_presentation.pdf`](../../presentation/phase2_presentation.pdf).
 
 The report uses the checked-in CSVs and notebooks, distinguishing the controlled
 20,000-row five-seed comparison from earlier operating points with different training
