@@ -1,0 +1,5 @@
+condition,mae_mean,mae_std,rmse_mean,rmse_std,r2_mean,r2_std
+mlp_alone,3.4109,0.1629,4.3605,0.2021,0.9447,0.0052
+plain_average,1.7764,0.0897,2.283,0.1101,0.9848,0.0015
+residual_hybrid,0.3888,0.1209,0.8027,0.1769,0.9981,0.0009
+xgboost_alone,0.3988,0.1291,0.8573,0.1924,0.9978,0.0011
