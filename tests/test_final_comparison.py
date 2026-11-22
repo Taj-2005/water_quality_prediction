@@ -31,6 +31,7 @@ from src.final_comparison import (  # noqa: E402
     XGB_FIXED_PARAMS_TUNED,
     compute_error_breakdown_by_area,
     compute_error_breakdown_by_country,
+    compute_paired_differences,
     compute_tail_metrics,
     run_naive_baseline,
     run_random_forest,
@@ -217,3 +218,72 @@ class TestErrorBreakdowns:
         assert "Area" in df.columns
         assert "sample_count" in df.columns
         assert df["sample_count"].sum() <= 80
+
+
+class TestPairedDifferencesAndModelSize:
+    """Validate paired differences computation and measured model size."""
+
+    def test_hybrid_mlp_parameter_count_is_exact(self):
+        from src.dl.model import WaterQualityMLP  # noqa: PLC0415
+
+        model = WaterQualityMLP(input_dim=10, hidden_dims=(128, 64, 32))
+        total_params = sum(p.numel() for p in model.parameters())
+        # Layer 1: 10*128 + 128 = 1,408
+        # Layer 2: 128*64 + 64  = 8,256
+        # Layer 3: 64*32 + 32   = 2,080
+        # Layer 4: 32*1 + 1     =    33
+        # Total = 1,408 + 8,256 + 2,080 + 33 = 11,777
+        assert total_params == 11777
+
+    def test_compute_paired_differences_synthetic(self, tmp_path):
+        records = []
+        for s in [42, 123, 456, 789, 1011]:
+            # Hybrid vs Base: let Hybrid have lower error on 4 seeds and higher on 1
+            h_err = 0.6 if s != 1011 else 0.7
+            b_err = 0.65
+            records.append(
+                {
+                    "seed": s,
+                    "model": "Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",
+                    "test_rmse": h_err,
+                    "test_mae": 0.3,
+                    "test_p95_ae": 1.1,
+                    "test_p99_ae": 2.5,
+                    "test_max_ae": 10.0,
+                }
+            )
+            records.append(
+                {
+                    "seed": s,
+                    "model": "XGBoost (Jivit Hybrid Base, 10 Raw Features)",
+                    "test_rmse": b_err,
+                    "test_mae": 0.31,
+                    "test_p95_ae": 1.2,
+                    "test_p99_ae": 2.7,
+                    "test_max_ae": 12.0,
+                }
+            )
+            records.append(
+                {
+                    "seed": s,
+                    "model": "XGBoost (Phase 1 Tuned, 23 Eng Features)",
+                    "test_rmse": 0.55,
+                    "test_mae": 0.21,
+                    "test_p95_ae": 0.85,
+                    "test_p99_ae": 2.4,
+                    "test_max_ae": 11.0,
+                }
+            )
+
+        df_synthetic = pd.DataFrame(records)
+        out_csv = tmp_path / "paired_diff.csv"
+        paired_df = compute_paired_differences(df_synthetic, output_path=out_csv)
+
+        assert out_csv.exists()
+        assert len(paired_df) == 10  # 2 pairs x 5 metrics
+        row_rmse = paired_df[
+            (paired_df["comparison"] == "Hybrid vs XGBoost Base (10 raw)")
+            & (paired_df["metric"] == "RMSE")
+        ].iloc[0]
+        assert row_rmse["seeds_m1_better"] == 4
+        assert row_rmse["win_rate_m1"] == "4/5"

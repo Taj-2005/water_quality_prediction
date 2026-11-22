@@ -3,4 +3,4 @@ Naive Baseline,20000,1,0.0,0.0004,arm (8 cores),numpy
 Random Forest,20000,189884,0.387,0.1159,arm (8 cores),scikit-learn
 "XGBoost (Phase 1 Tuned, 23 Eng Features)",20000,109501,48.123,1.6714,arm (8 cores),xgboost
 Tuned MLP (256x4 GELU),20000,204289,17.232,0.1882,arm (8 cores),pytorch-2.15.0
-Hybrid (XGBoost Base + Residual MLP),20000,11809,55.26,1.8595,arm (8 cores),xgboost + pytorch (size: MLP only)
+Hybrid (XGBoost Base + Residual MLP),20000,11777,55.26,1.8595,arm (8 cores),"xgboost + pytorch (size: MLP only, 11,777 params)"

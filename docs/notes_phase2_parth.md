@@ -73,60 +73,98 @@ Investigation of the code and report lineages identified the exact sources:
 
 ### Table 1: Controlled Comparison Benchmark (Exact 20,000 Rows, 5 Seeds)
 *Every model trained on the exact same 20,000 training observations across all 5 seeds (`[42, 123, 456, 789, 1011]`). Evaluated on the held-out test split (415,804 rows).*  
-*Disclosure: formula-approximation benchmark (CCME_Values computed from 8 input parameters).*
+*Disclosure: formula-approximation benchmark (CCME_Values computed from 8 input parameters). Same training rows, feature sets differ.*
 
-| Model | Features | Size (parameters or tree nodes) | Test RMSE (mean ± std) | Test MAE (mean ± std) | Test P95 AE (mean ± std) | Test P99 AE (mean ± std) | Test Max AE (mean ± std) | Test $R^2$ (mean ± std) |
+| Model | Feature Set | Size (parameters or tree nodes) | Test RMSE (mean ± std) | Test MAE (mean ± std) | Test P95 AE (mean ± std) | Test P99 AE (mean ± std) | Test Max AE (mean ± std) | Test $R^2$ (mean ± std) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **XGBoost (Phase 1 Tuned)** | 23 Eng | 111,228 nodes | **0.5602 ± 0.0284** | **0.2130 ± 0.0085** | **0.8736 ± 0.0356** | **2.4743 ± 0.1206** | **11.7142 ± 1.1033** | **0.9991 ± 0.0001** |
-| **Residual Hybrid** | 10 Raw | 11,809 params (MLP only) | 0.6356 ± 0.0824 | 0.3022 ± 0.0499 | 1.1865 ± 0.1877 | 2.5806 ± 0.2378 | 12.5283 ± 3.5568 | 0.9988 ± 0.0003 |
-| **XGBoost (Jivit Hybrid Base)** | 10 Raw | 120,375 nodes | 0.6757 ± 0.0949 | 0.3016 ± 0.0501 | 1.2090 ± 0.2009 | 2.7325 ± 0.2874 | 15.0811 ± 4.0863 | 0.9987 ± 0.0004 |
-| **Random Forest (Phase 1)** | 38 One-Hot | 185,636 nodes | 1.4543 ± 0.0504 | 0.6545 ± 0.0148 | 2.6878 ± 0.0574 | 6.0583 ± 0.0589 | 24.6490 ± 2.2994 | 0.9939 ± 0.0004 |
-| **Tuned MLP** | 10 Raw | 204,289 params | 1.7295 ± 0.0721 | 1.1464 ± 0.0537 | 3.6101 ± 0.1256 | 5.8123 ± 0.2743 | 36.1018 ± 7.1832 | 0.9914 ± 0.0007 |
-| **Naive Baseline** | Raw target | 1 param | 18.6559 ± 0.0012 | 14.8991 ± 0.0159 | 40.9058 ± 0.0477 | 44.8921 ± 0.0477 | 50.9211 ± 0.0477 | -0.0006 ± 0.0001 |
+| **XGBoost (Phase 1 Tuned)** | 23 engineered features (ratios + log transforms) | 111,228 nodes | **0.5602 ± 0.0284** | **0.2130 ± 0.0085** | **0.8736 ± 0.0356** | **2.4743 ± 0.1206** | **11.7142 ± 1.1033** | **0.9991 ± 0.0001** |
+| **Residual Hybrid** | 10 raw features (XGB base + residual MLP) | 11,777 params (MLP only) | 0.6356 ± 0.0824 | 0.3022 ± 0.0499 | 1.1865 ± 0.1877 | 2.5806 ± 0.2378 | 12.5283 ± 3.5568 | 0.9988 ± 0.0003 |
+| **XGBoost (Jivit Hybrid Base)** | 10 raw features | 120,375 nodes | 0.6757 ± 0.0949 | 0.3016 ± 0.0501 | 1.2090 ± 0.2009 | 2.7325 ± 0.2874 | 15.0811 ± 4.0863 | 0.9987 ± 0.0004 |
+| **Random Forest (Phase 1)** | 38 features (Phase 1 one-hot) | 185,636 nodes | 1.4543 ± 0.0504 | 0.6545 ± 0.0148 | 2.6878 ± 0.0574 | 6.0583 ± 0.0589 | 24.6490 ± 2.2994 | 0.9939 ± 0.0004 |
+| **Tuned MLP** | 10 raw features (quantile normalized) | 204,289 params | 1.7295 ± 0.0721 | 1.1464 ± 0.0537 | 3.6101 ± 0.1256 | 5.8123 ± 0.2743 | 36.1018 ± 7.1832 | 0.9914 ± 0.0007 |
+| **Naive Baseline** | Target only | 1 param | 18.6559 ± 0.0012 | 14.8991 ± 0.0159 | 40.9058 ± 0.0477 | 44.8921 ± 0.0477 | 50.9211 ± 0.0477 | -0.0006 ± 0.0001 |
+
+#### Feature Control & Input Representation Investigation
+We investigated evaluating the Tuned MLP and Residual Hybrid on the same 23 engineered features used by Tuned XGBoost. However, doing so requires modifying other teammates' files:
+1. `src/dl/hybrid.py` (owned by Jivit) hardcodes `get_splits(include_metadata=True)` which returns only the 10 raw features, and exposes no argument for passing an external feature matrix.
+2. `src/dl/nn_preprocess.py` (owned by Taj) filters continuous columns strictly by `c in MEASUREMENTS` (the 8 raw chemical measurements) and drops all other columns via `remainder="drop"`.
+Under team ownership constraints (*"say if the existing code can't do this without editing others' files and stop there"*), we preserve teammates' files, explicitly label Table 1 `"same training rows, feature sets differ"`, and add the `Feature Set` column documenting each model's inputs.
 
 ---
 
 ### Table 2: Reported Operating Points from Earlier Single-Seed Runs (Different Training Sizes, Not Comparable)
 
 > [!NOTE]
-> **Non-Comparable Operating Regimes**: The table below compiles operating points reported from earlier single-seed runs across different training partition sizes (ranging from 20,000 to 1,986,397 rows). Because training sample sizes differ by up to two orders of magnitude, these numbers reflect distinct computational operating regimes and cannot be used to rank model architectures.
+> **Non-Comparable Operating Regimes**: The table below compiles operating points reported from earlier single-seed runs across different training partition sizes (ranging from 20,000 to 1,986,397 rows). Because training sample sizes differ by up to two orders of magnitude, these numbers reflect distinct computational operating regimes and cannot be used to rank model architectures. Tail error metrics (P95, P99, Max AE) are excluded because earlier single-seed runs did not save full prediction arrays. All reported values originate strictly from CSV files in `reports/`.
 
-| Model | Training Samples | Size (parameters or tree nodes) | Fit Time (s) | Test MAE | Test RMSE | Test P95 AE | Test P99 AE | Test Max AE | Test $R^2$ |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **XGBoost (Phase 1 Full Data, 23 Eng Features)** | 1,986,397 | 109,501 nodes | 730.0s | 0.1000 | 0.3282 | 0.3720 | 0.9610 | 5.9800 | 0.9997 |
-| **Random Forest (Full Data Trial, 38 Features)** | 1,986,397 | 2,191,352 nodes | 52.41s | 0.2669 | 0.5830 | 0.8240 | 1.7820 | 6.9150 | 0.9990 |
-| **Residual Hybrid (XGB Base + MLP, 10 Raw Features)** | 20,000 | 11,809 params (MLP only) | 76.44s | 0.4110 | 0.8521 | 1.3550 | 2.7300 | 7.5100 | 0.9979 |
-| **Random Forest (Phase 1 100k Benchmark, 38 Features)** | 100,000 | 398,998 nodes | 32.5s | 0.4078 | 0.9197 | 1.5010 | 2.9120 | 8.2400 | 0.9976 |
-| **Tuned MLP (Phase 2 200k Architecture Benchmark)** | 200,000 | 204,289 params | 142.0s | 0.5344 | 0.9306 | 1.7650 | 3.1540 | 9.5800 | 0.9975 |
-| **Naive Baseline (Mean)** | 1,986,397 | 1 param | 0.05s | 14.7725 | 18.5081 | 27.8100 | 34.5900 | 85.1380 | 0.0000 |
+| Model | Feature Set | Training Samples | Size (parameters or tree nodes) | Fit Time (s) | Test MAE | Test RMSE | Test $R^2$ |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **XGBoost (Phase 1 Full Data, 23 Eng Features, Single Seed s=42)** | 23 engineered features (ratios + log transforms) | 1,986,397 | 109,501 nodes | 730.0s | 0.1000 | 0.3282 | 0.9997 |
+| **Random Forest (Full Data Trial, 38 Features, Single Seed s=42)** | 38 features (Phase 1 one-hot) | 1,986,397 | 2,191,352 nodes | 52.41s | 0.2669 | 0.5830 | 0.9990 |
+| **Residual Hybrid (XGB Base + MLP, 10 Raw Features, Single Seed s=42)** | 10 raw features (XGB base + residual MLP) | 20,000 | 11,777 params (MLP only) | 76.44s | 0.4110 | 0.8521 | 0.9979 |
+| **Random Forest (Phase 1 100k Benchmark, 38 Features, Single Seed s=42)** | 38 features (Phase 1 one-hot) | 100,000 | 398,998 nodes | 32.5s | 0.4078 | 0.9197 | 0.9976 |
+| **Tuned MLP (Phase 2 200k Architecture Benchmark, Single Seed s=42)** | 10 raw features (quantile normalized) | 200,000 | 204,289 params | 142.0s | 0.5344 | 0.9306 | 0.9975 |
+| **Naive Baseline (Mean, Single Seed s=42)** | Target only | 1,986,397 | 1 param | 0.05s | 14.7725 | 18.5081 | 0.0000 |
 
-#### Random Forest Full Training Trial Outcome
-As part of technical validation, Random Forest was evaluated on the full 1,986,397 training observations with Phase 1 hyperparameters (`n_estimators=100, max_depth=15, min_samples_leaf=5, max_features="sqrt"`, `n_jobs=-1`, 20-minute hard timeout):
+#### Random Forest Full Training Trial Outcome (Single Seed s=42)
+As part of technical validation, Random Forest was evaluated on the full 1,986,397 training observations with Phase 1 hyperparameters (`n_estimators=100, max_depth=15, min_samples_leaf=5, max_features="sqrt"`, `n_jobs=-1`, 20-minute hard timeout). This is an empirical single-seed trial (no std):
 - **Outcome**: Completed successfully in **52.41 seconds** (56.53s total including I/O).
 - **Test Metrics**: Test RMSE = **0.5830**, Test MAE = **0.2669**, Test $R^2$ = **0.9990**.
 - **Measured Tree Size**: **2,191,352 tree nodes** across the 100 estimators.
-- **Empirical Reality**: Full Random Forest does **not** exhaust memory or fail on Apple Silicon arm64 (8 physical cores); speculative "memory exhaustion" wording has been removed from repo documentation.
+- **Empirical Reality**: Full Random Forest does **not** exhaust memory or fail on Apple Silicon arm64 (8 physical cores); speculative "memory exhaustion" wording has been removed from repo documentation. As a single-seed trial across a different training size, it is excluded from any direct ranking against the 5-seed controlled table.
+
+---
+
+### Table 3: Paired Differences Statistical Analysis Across 5 Random Seeds (`reports/paired_differences.csv`)
+
+To rigorously isolate architectural signal from random seed stochasticity, we compute paired differences per seed across the 5 literature seeds (`[42, 123, 456, 789, 1011]`):
+
+$$\Delta_i = \text{Error}(M_{2, \text{seed}_i}) - \text{Error}(M_{1, \text{seed}_i})$$
+
+A positive mean difference indicates that Model 1 has lower error (is better) by that margin:
+
+| Comparison | Metric | Model 1 ($M_1$) | Model 2 ($M_2$) | Mean Difference | Std Difference | Seeds $M_1$ Better | Total Seeds | Win Rate $M_1$ |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Hybrid vs XGB Base** | RMSE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | **+0.0400** | 0.0150 | 5 | 5 | **5/5** |
+| **Hybrid vs XGB Base** | MAE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | -0.0006 | 0.0059 | 2 | 5 | 2/5 |
+| **Hybrid vs XGB Base** | P95 AE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | +0.0225 | 0.0269 | 4 | 5 | 4/5 |
+| **Hybrid vs XGB Base** | P99 AE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | **+0.1520** | 0.0634 | 5 | 5 | **5/5** |
+| **Hybrid vs XGB Base** | Max AE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | **+2.5528** | 0.9175 | 5 | 5 | **5/5** |
+| **Tuned XGB vs Hybrid** | RMSE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | **+0.0754** | 0.0652 | 5 | 5 | **5/5** |
+| **Tuned XGB vs Hybrid** | MAE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | **+0.0892** | 0.0564 | 5 | 5 | **5/5** |
+| **Tuned XGB vs Hybrid** | P95 AE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | **+0.3129** | 0.2098 | 5 | 5 | **5/5** |
+| **Tuned XGB vs Hybrid** | P99 AE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | +0.1063 | 0.2020 | 3 | 5 | 3/5 |
+| **Tuned XGB vs Hybrid** | Max AE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | +0.8141 | 2.5716 | 2 | 5 | 2/5 |
 
 ---
 
 ## 4. When Does the MLP Beat the Trees and When Does It Not?
 
-Based strictly on the empirical values presented in Table 1 and Table 2:
+Based strictly on the empirical values presented in Table 1, Table 2, and Table 3:
 
 ### 1. Accuracy and Error Comparison:
 - **Standalone Accuracy**: Across all evaluated sample sizes, the standalone Tuned MLP does **not** beat XGBoost or Random Forest on test error. On the controlled 20,000-sample benchmark:
   - Tuned XGBoost (23 engineered features) scores Test RMSE **0.5602** vs. Tuned MLP's **1.7295**.
   - Comparing on the identical 10 raw features without engineered ratios, XGBoost Base scores Test RMSE **0.6757**, Random Forest scores **1.4543**, and Tuned MLP scores **1.7295**.
-- **Tail Error Analysis**:
-  - Standalone Tuned XGBoost (23 engineered features) achieves the lowest tail error across all models (P95 AE = **0.8736**, P99 AE = **2.4743**, Max AE = **11.7142**).
-  - Comparing models on the raw 10 features, the **Residual Hybrid demonstrates a measurable tail benefit over its own XGBoost Base**: P95 AE decreases from **1.2090** to **1.1865**, P99 AE decreases from **2.7325** to **2.5806**, and Max AE decreases from **15.0811** to **12.5283**.
-  - The standalone Tuned MLP exhibits higher tail error (P95 AE = **3.6101**, P99 AE = **5.8123**, Max AE = **36.1018**), reflecting rounding errors near the sharp threshold boundaries of the CCME formula.
+- **Tail Error & Paired Analysis**:
+  - **Hybrid vs. XGBoost Base (10 Raw Features)**:
+    - **RMSE**: Hybrid beats Base in **5 of 5 seeds** (mean reduction $+0.0400 \pm 0.0150$).
+    - **MAE**: Essentially tied (mean diff $-0.0006 \pm 0.0059$, Hybrid better in 2 of 5 seeds).
+    - **P95 Absolute Error**: Hybrid beats Base in **4 of 5 seeds** (mean diff $+0.0225 \pm 0.0269$). On seed 1011, Base achieves slightly lower P95 error (1.2564 vs. 1.2666). Because 1 seed favors Base, **we make NO claim of a consistent tail benefit on P95**.
+    - **Extreme Tail (P99 AE & Max AE)**: Hybrid consistently achieves lower extreme error across **5 of 5 seeds**: P99 AE improves by $+0.1520 \pm 0.0634$ (5/5 seeds), and Max AE improves by $+2.5528 \pm 0.9175$ (5/5 seeds, reducing maximum absolute error from 15.0811 to 12.5283).
+  - **Tuned XGBoost (23 Eng Features) vs. Hybrid (10 Raw Features)**:
+    - Tuned XGBoost beats Hybrid across **5 of 5 seeds** on RMSE (mean diff $+0.0754 \pm 0.0652$), MAE ($+0.0892 \pm 0.0564$), and P95 AE ($+0.3129 \pm 0.2098$).
+    - In extreme tails, however, Tuned XGBoost leads on P99 AE in **3 of 5 seeds** (mean diff $+0.1063 \pm 0.2020$), and the Residual Hybrid actually achieves lower Max AE on **3 of 5 seeds** (seeds 123, 789, 1011; overall mean diff $+0.8141 \pm 2.5716$, Tuned leads in 2 of 5 seeds).
+  - Standalone Tuned MLP exhibits higher tail error (P95 AE = **3.6101**, P99 AE = **5.8123**, Max AE = **36.1018**), reflecting rounding errors near the sharp threshold boundaries of the CCME formula.
 
 ### 2. Inference Latency and Model Footprint:
 - **Inference Latency**: The Tuned MLP beats tree models decisively in inference throughput. As profiled in Table 4 (`reports/compute_cost.csv`), the Tuned MLP executes inference at **0.1882s per 100,000 rows** via vectorized PyTorch BLAS matrix operations on CPU. This is:
   - **8.9× faster** than XGBoost (**1.6714s per 100k rows**).
   - **20.3× faster** than full Random Forest (**3.8200s per 100k rows**).
-- **Model Footprint**: The Tuned MLP contains **204,289 parameters**, while the full-data Random Forest contains **2,191,352 tree nodes** (398,998 at 100k scale) and XGBoost contains **109,501 tree nodes**. The Hybrid architecture contains an MLP of **11,809 parameters** (its tree node count is separate).
+- **Model Footprint & Measurement**:
+  - The Tuned MLP contains **204,289 parameters**.
+  - Full-data Random Forest contains **2,191,352 tree nodes** (398,998 at 100k scale) and XGBoost contains **109,501 tree nodes**.
+  - The Hybrid architecture contains an MLP residual network of **11,777 parameters** (measured directly via `sum(p.numel() for p in model.parameters())`: Layer 1 Linear(10, 128) has $10 \times 128 + 128 = 1,408$; Layer 2 Linear(128, 64) has $128 \times 64 + 64 = 8,256$; Layer 3 Linear(64, 32) has $64 \times 32 + 32 = 2,080$; Layer 4 Linear(32, 1) has $32 \times 1 + 1 = 33$; Total = $1,408 + 8,256 + 2,080 + 33 = 11,777$). Earlier mention of 11,809 was an arithmetic typo (+32 double counting output), and 46,809 was an unverified placeholder estimate prior to architecture freezing. Fixed to 11,777 everywhere.
 
 ---
 
@@ -156,7 +194,7 @@ Hardware profiled: **Apple M-series Silicon (8 physical cores, arm64), macOS Dar
 | **Random Forest (Full Trial)** | 1,986,397 | 2,191,352 nodes | 52.410s | 3.8200s | scikit-learn |
 | **XGBoost (Phase 1 Tuned)** | 20,000 | 109,501 nodes | 47.020s | 1.5770s | xgboost |
 | **Tuned MLP** | 20,000 | 204,289 params | 17.480s | **0.2080s** | pytorch |
-| **Residual Hybrid** | 20,000 | 11,809 params (MLP only) | 76.440s | 1.8405s | xgboost + pytorch |
+| **Residual Hybrid** | 20,000 | 11,777 params (MLP only) | 76.440s | 1.8405s | xgboost + pytorch (MLP only) |
 
 ---
 

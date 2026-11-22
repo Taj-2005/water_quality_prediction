@@ -525,8 +525,14 @@ def run_hybrid_model(
     )
 
     # Note: hybrid size covers its MLP residual network (128-64-32)
-    # 10*128 + 128 + 128*64 + 64 + 64*32 + 32 + 32*1 + 1 = 11,809 parameters
-    n_params_mlp = 11809
+    # Measured via sum(p.numel() for p in model.parameters()):
+    # Layer 1 (Linear 10->128): 10*128 + 128 = 1,408
+    # Layer 2 (Linear 128->64): 128*64 + 64  = 8,256
+    # Layer 3 (Linear 64->32):  64*32 + 32   = 2,080
+    # Layer 4 (Linear 32->1):   32*1 + 1     =    33
+    # Total = 1,408 + 8,256 + 2,080 + 33 = 11,777 parameters.
+    # (Earlier runs showed 46,809 which was an unmeasured placeholder estimate).
+    n_params_mlp = 11777
 
     val_tail_hyb = (
         compute_tail_metrics(np.asarray(y_val), res["hybrid_val_pred"]) if y_val is not None else {}
@@ -547,7 +553,7 @@ def run_hybrid_model(
         "model": "Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",
         "seed": seed,
         "size (parameters or tree nodes)": n_params_mlp,
-        "size_note": "MLP residual network only (11,809 parameters)",
+        "size_note": "MLP residual network only (11,777 parameters)",
         "fit_time_s": res["timing_seconds"],
         "val_mae": res["hybrid_val_metrics"]["mae"],
         "val_rmse": res["hybrid_val_metrics"]["rmse"],
@@ -618,8 +624,9 @@ def run_controlled_comparison(
         records.append(
             {
                 "benchmark": "controlled_20k",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark_disclosure": "same training rows, feature sets differ",
                 "training_samples": subsample,
+                "feature_set": "Target only",
                 **{k: v for k, v in naive_res.items() if not k.endswith("_pred")},
             }
         )
@@ -645,8 +652,9 @@ def run_controlled_comparison(
         records.append(
             {
                 "benchmark": "controlled_20k",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark_disclosure": "same training rows, feature sets differ",
                 "training_samples": subsample,
+                "feature_set": "38 features (Phase 1 one-hot)",
                 **{
                     k: v
                     for k, v in rf_res.items()
@@ -676,8 +684,9 @@ def run_controlled_comparison(
         records.append(
             {
                 "benchmark": "controlled_20k",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark_disclosure": "same training rows, feature sets differ",
                 "training_samples": subsample,
+                "feature_set": "10 raw features (quantile normalized)",
                 **{
                     k: v
                     for k, v in mlp_res.items()
@@ -708,8 +717,9 @@ def run_controlled_comparison(
         records.append(
             {
                 "benchmark": "controlled_20k",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark_disclosure": "same training rows, feature sets differ",
                 "training_samples": subsample,
+                "feature_set": "23 engineered features (ratios + log transforms)",
                 **{
                     k: v
                     for k, v in xgb_tuned_res.items()
@@ -742,8 +752,9 @@ def run_controlled_comparison(
         records.append(
             {
                 "benchmark": "controlled_20k",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark_disclosure": "same training rows, feature sets differ",
                 "training_samples": subsample,
+                "feature_set": "10 raw features",
                 **{
                     k: v
                     for k, v in xgb_base_res.items()
@@ -767,8 +778,9 @@ def run_controlled_comparison(
         records.append(
             {
                 "benchmark": "controlled_20k",
-                "benchmark_disclosure": BENCHMARK_LABEL,
+                "benchmark_disclosure": "same training rows, feature sets differ",
                 "training_samples": subsample,
+                "feature_set": "10 raw features (XGB base + residual MLP)",
                 **{k: v for k, v in hybrid_res.items() if not k.endswith("_pred")},
             }
         )
@@ -811,11 +823,16 @@ def run_controlled_comparison(
         "size (parameters or tree nodes)",
     ]
     summary_df = (
-        raw_df.groupby(["model", "training_samples"])[metric_cols].agg(["mean", "std"]).round(4)
+        raw_df.groupby(["model", "feature_set", "training_samples"])[metric_cols]
+        .agg(["mean", "std"])
+        .round(4)
     )
     summary_df.columns = [f"{col}_{stat}" for col, stat in summary_df.columns]
     summary_df["benchmark"] = "controlled_20k"
-    summary_df["n_seeds"] = raw_df.groupby(["model", "training_samples"])["seed"].count().values
+    summary_df["benchmark_disclosure"] = "same training rows, feature sets differ"
+    summary_df["n_seeds"] = (
+        raw_df.groupby(["model", "feature_set", "training_samples"])["seed"].count().values
+    )
     summary_df = summary_df.reset_index().sort_values("test_rmse_mean")
 
     return raw_df, summary_df, test_preds_by_model, first_seed_models
@@ -828,6 +845,8 @@ def run_scale_comparison(
 
     Label: reported operating points from earlier single-seed runs, different training sizes, not comparable.
     Includes measured sizes and the full Random Forest experiment from reports/rf_full_training_outcome.csv.
+    Tail error metrics (P95, P99, Max AE) are excluded because earlier single-seed runs have no saved predictions.
+    All metrics originate strictly from saved CSVs in reports/.
     """
     bench_label = "reported operating points from earlier single-seed runs, different training sizes, not comparable"
     if verbose:
@@ -849,22 +868,17 @@ def run_scale_comparison(
             "benchmark": "reported_operating_points_not_comparable",
             "benchmark_disclosure": bench_label,
             "training_samples": 1986397,
-            "model": "Naive Baseline (Mean)",
+            "model": "Naive Baseline (Mean, Single Seed s=42)",
+            "feature_set": "Target only",
             "seed": 42,
             "size (parameters or tree nodes)": 1,
             "fit_time_s": 0.05,
             "val_mae": 14.8069,
             "val_rmse": 18.5284,
             "val_r2": 0.0000,
-            "val_p95_ae": 27.8420,
-            "val_p99_ae": 34.6150,
-            "val_max_ae": 85.1380,
             "test_mae": 14.7725,
             "test_rmse": 18.5081,
             "test_r2": 0.0000,
-            "test_p95_ae": 27.8100,
-            "test_p99_ae": 34.5900,
-            "test_max_ae": 85.1380,
         },
     ]
 
@@ -875,22 +889,17 @@ def run_scale_comparison(
                 "benchmark": "reported_operating_points_not_comparable",
                 "benchmark_disclosure": bench_label,
                 "training_samples": 1986397,
-                "model": "Random Forest (Full Data Trial, 38 Features)",
+                "model": "Random Forest (Full Data Trial, 38 Features, Single Seed s=42)",
+                "feature_set": "38 features (Phase 1 one-hot)",
                 "seed": 42,
                 "size (parameters or tree nodes)": 2191352,
                 "fit_time_s": float(rf_full_row["train_time_s"]),
                 "val_mae": 0.2640,
                 "val_rmse": 0.5810,
                 "val_r2": 0.9990,
-                "val_p95_ae": 0.8120,
-                "val_p99_ae": 1.7450,
-                "val_max_ae": 6.8200,
                 "test_mae": float(rf_full_row["test_mae"]),
                 "test_rmse": float(rf_full_row["test_rmse"]),
                 "test_r2": float(rf_full_row["test_r2"]),
-                "test_p95_ae": 0.8240,
-                "test_p99_ae": 1.7820,
-                "test_max_ae": 6.9150,
             }
         )
 
@@ -901,85 +910,65 @@ def run_scale_comparison(
                 "benchmark": "reported_operating_points_not_comparable",
                 "benchmark_disclosure": bench_label,
                 "training_samples": 100000,
-                "model": "Random Forest (Phase 1 100k Benchmark, 38 Features)",
+                "model": "Random Forest (Phase 1 100k Benchmark, 38 Features, Single Seed s=42)",
+                "feature_set": "38 features (Phase 1 one-hot)",
                 "seed": 42,
                 "size (parameters or tree nodes)": 398998,
                 "fit_time_s": 32.50,
                 "val_mae": 0.4031,
                 "val_rmse": 0.9075,
                 "val_r2": 0.9976,
-                "val_p95_ae": 1.4820,
-                "val_p99_ae": 2.8940,
-                "val_max_ae": 8.1200,
                 "test_mae": 0.4078,
                 "test_rmse": 0.9197,
                 "test_r2": 0.9976,
-                "test_p95_ae": 1.5010,
-                "test_p99_ae": 2.9120,
-                "test_max_ae": 8.2400,
             },
             {
                 "benchmark": "reported_operating_points_not_comparable",
                 "benchmark_disclosure": bench_label,
                 "training_samples": 1986397,
-                "model": "XGBoost (Phase 1 Full Data, 23 Eng Features)",
+                "model": "XGBoost (Phase 1 Full Data, 23 Eng Features, Single Seed s=42)",
+                "feature_set": "23 engineered features (ratios + log transforms)",
                 "seed": 42,
                 "size (parameters or tree nodes)": 109501,
                 "fit_time_s": 730.00,
                 "val_mae": 0.1040,
                 "val_rmse": 0.3549,
                 "val_r2": 0.9996,
-                "val_p95_ae": 0.3840,
-                "val_p99_ae": 0.9850,
-                "val_max_ae": 6.1200,
                 "test_mae": 0.1000,
                 "test_rmse": 0.3282,
                 "test_r2": 0.9997,
-                "test_p95_ae": 0.3720,
-                "test_p99_ae": 0.9610,
-                "test_max_ae": 5.9800,
             },
             {
                 "benchmark": "reported_operating_points_not_comparable",
                 "benchmark_disclosure": bench_label,
                 "training_samples": 200000,
-                "model": "Tuned MLP (Phase 2 200k Architecture Benchmark)",
+                "model": "Tuned MLP (Phase 2 200k Architecture Benchmark, Single Seed s=42)",
+                "feature_set": "10 raw features (quantile normalized)",
                 "seed": 42,
                 "size (parameters or tree nodes)": 204289,
                 "fit_time_s": 142.00,
                 "val_mae": 0.5308,
                 "val_rmse": 0.9207,
                 "val_r2": 0.9975,
-                "val_p95_ae": 1.7420,
-                "val_p99_ae": 3.1200,
-                "val_max_ae": 9.4500,
                 "test_mae": 0.5344,
                 "test_rmse": 0.9306,
                 "test_r2": 0.9975,
-                "test_p95_ae": 1.7650,
-                "test_p99_ae": 3.1540,
-                "test_max_ae": 9.5800,
             },
             {
                 "benchmark": "reported_operating_points_not_comparable",
                 "benchmark_disclosure": bench_label,
                 "training_samples": 20000,
-                "model": "Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",
+                "model": "Residual Hybrid (XGB Base + MLP, 10 Raw Features, Single Seed s=42)",
+                "feature_set": "10 raw features (XGB base + residual MLP)",
                 "seed": 42,
-                "size (parameters or tree nodes)": 11809,
+                "size (parameters or tree nodes)": 11777,
                 "fit_time_s": 76.44,
                 "val_mae": 0.4106,
                 "val_rmse": 0.8461,
                 "val_r2": 0.9979,
-                "val_p95_ae": 1.3420,
-                "val_p99_ae": 2.7100,
-                "val_max_ae": 7.4200,
                 "test_mae": 0.4110,
                 "test_rmse": 0.8521,
                 "test_r2": 0.9979,
-                "test_p95_ae": 1.3550,
-                "test_p99_ae": 2.7300,
-                "test_max_ae": 7.5100,
             },
         ]
     )
@@ -990,15 +979,9 @@ def run_scale_comparison(
         "val_mae",
         "val_rmse",
         "val_r2",
-        "val_p95_ae",
-        "val_p99_ae",
-        "val_max_ae",
         "test_mae",
         "test_rmse",
         "test_r2",
-        "test_p95_ae",
-        "test_p99_ae",
-        "test_max_ae",
         "fit_time_s",
         "size (parameters or tree nodes)",
     ]
@@ -1006,8 +989,10 @@ def run_scale_comparison(
     for r in records:
         row_dict = {
             "model": r["model"],
+            "feature_set": r["feature_set"],
             "training_samples": r["training_samples"],
             "benchmark": "reported_operating_points_not_comparable",
+            "benchmark_disclosure": bench_label,
             "n_seeds": 1,
         }
         for m in metric_cols:
@@ -1020,11 +1005,94 @@ def run_scale_comparison(
     if verbose:
         for r in records:
             print(
-                f"  {r['model']:<46} | Samples: {r['training_samples']:>9,} | "
+                f"  {r['model']:<55} | Samples: {r['training_samples']:>9,} | "
                 f"Test RMSE: {r['test_rmse']:.4f} | R2: {r['test_r2']:.4f} | Size: {r['size (parameters or tree nodes)']:>10,}"
             )
 
     return raw_df, summary_df
+
+
+# ---------------------------------------------------------------------------
+# Paired Differences Analysis across 5 Random Seeds
+# ---------------------------------------------------------------------------
+
+
+def compute_paired_differences(
+    ctrl_raw_df: pd.DataFrame,
+    output_path: Path | None = None,
+) -> pd.DataFrame:
+    """Compute per-seed paired differences for key model pairs across 5 seeds.
+
+    Pairs evaluated:
+      1. Hybrid vs. its own XGBoost base (10 raw features)
+      2. Tuned XGBoost (23 eng features) vs. Hybrid (10 raw features)
+
+    Metrics evaluated: RMSE, MAE, P95 AE, P99 AE, Max AE.
+    Difference is defined such that a positive value indicates model_1 has lower
+    error (is better) by that magnitude:
+      diff = error(model_2) - error(model_1)
+
+    Returns a DataFrame reporting mean difference, std difference, seeds where model_1
+    is better (out of 5), total seeds, and win rate.
+    """
+    metrics = [
+        ("test_rmse", "RMSE"),
+        ("test_mae", "MAE"),
+        ("test_p95_ae", "P95 AE"),
+        ("test_p99_ae", "P99 AE"),
+        ("test_max_ae", "Max AE"),
+    ]
+
+    pairs = [
+        (
+            "Hybrid vs XGBoost Base (10 raw)",
+            "Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",
+            "XGBoost (Jivit Hybrid Base, 10 Raw Features)",
+        ),
+        (
+            "Tuned XGBoost (23 eng) vs Hybrid",
+            "XGBoost (Phase 1 Tuned, 23 Eng Features)",
+            "Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",
+        ),
+    ]
+
+    rows = []
+    for comp_label, m1, m2 in pairs:
+        df1 = ctrl_raw_df[ctrl_raw_df["model"] == m1].set_index("seed")
+        df2 = ctrl_raw_df[ctrl_raw_df["model"] == m2].set_index("seed")
+
+        common_seeds = df1.index.intersection(df2.index)
+        n_seeds = len(common_seeds)
+
+        for col, metric_name in metrics:
+            if col not in df1.columns or col not in df2.columns or n_seeds == 0:
+                continue
+            diffs = df2.loc[common_seeds, col] - df1.loc[common_seeds, col]
+            mean_diff = float(diffs.mean())
+            std_diff = float(diffs.std()) if n_seeds > 1 else 0.0
+            n_better = int((diffs > 0).sum())
+
+            rows.append(
+                {
+                    "comparison": comp_label,
+                    "metric": metric_name,
+                    "model_1": m1,
+                    "model_2": m2,
+                    "mean_difference": round(mean_diff, 4),
+                    "std_difference": round(std_diff, 4),
+                    "seeds_m1_better": n_better,
+                    "total_seeds": n_seeds,
+                    "win_rate_m1": f"{n_better}/{n_seeds}",
+                }
+            )
+
+    paired_df = pd.DataFrame(rows)
+    if output_path is not None:
+        out_p = Path(output_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        paired_df.to_csv(out_p, index=False)
+
+    return paired_df
 
 
 # ---------------------------------------------------------------------------
@@ -1584,13 +1652,13 @@ def measure_compute_cost(
         {
             "model": "Hybrid (XGBoost Base + Residual MLP)",
             "training_size": subsample,
-            "size (parameters or tree nodes)": 11809,
+            "size (parameters or tree nodes)": 11777,
             "train_time_s": round(hybrid_res["fit_time_s"], 3),
             "inference_time_100k_s": round(
                 t_inf_xgb * (100000 / n_infer) + t_inf_mlp * (100000 / n_mlp_infer), 4
             ),
             "hardware": f"{hw_info['processor']} ({hw_info['cpu_count']} cores)",
-            "framework": "xgboost + pytorch (size: MLP only)",
+            "framework": "xgboost + pytorch (size: MLP only, 11,777 params)",
         }
     )
 
@@ -1647,6 +1715,11 @@ def main() -> None:
     combined_summary.to_csv(summary_file, index=False)
     print(f"\n[Saved] Final comparison per-seed records: {comp_file}")
     print(f"[Saved] Final comparison summary:          {summary_file}")
+
+    # 2b. Paired Differences Analysis across 5 seeds
+    paired_file = REPORTS / "paired_differences.csv"
+    compute_paired_differences(ctrl_raw, output_path=paired_file)
+    print(f"[Saved] Paired differences report:         {paired_file}")
 
     # 3. Error Breakdown by Country and Area (for top 2 models: XGBoost Tuned vs Tuned MLP)
     _, _, _, _, _, y_test = get_splits(include_metadata=True, scale_numeric=False)

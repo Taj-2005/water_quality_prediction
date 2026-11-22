@@ -619,30 +619,54 @@ Phase 2 compares the deep learning model and residual hybrid fairly against the 
 Evaluated across the 5 team-agreed literature seeds (`[42, 123, 456, 789, 1011]`) on the held-out test split (415,804 rows):
 
 #### Table 1: Controlled Subsample Benchmark (Exact 20,000 Rows, 5 Seeds)
-*Strict mathematical parity: every model trained on the exact same 20,000 observations across all 5 seeds.*
+*Strict mathematical parity: every model trained on the exact same 20,000 observations across all 5 seeds. Same training rows, feature sets differ.*
 
-| Model | Features | Size (parameters or tree nodes) | Test RMSE (mean ± std) | Test MAE (mean ± std) | Test P95 AE (mean ± std) | Test P99 AE (mean ± std) | Test Max AE (mean ± std) | Test $R^2$ (mean ± std) |
+| Model | Feature Set | Size (parameters or tree nodes) | Test RMSE (mean ± std) | Test MAE (mean ± std) | Test P95 AE (mean ± std) | Test P99 AE (mean ± std) | Test Max AE (mean ± std) | Test $R^2$ (mean ± std) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **XGBoost (Phase 1 Tuned)** | 23 Eng | 111,228 nodes | **0.5602 ± 0.0284** | **0.2130 ± 0.0085** | **0.8736 ± 0.0356** | **2.4743 ± 0.1206** | **11.7142 ± 1.1033** | **0.9991 ± 0.0001** |
-| **Residual Hybrid** | 10 Raw | 11,809 params (MLP only) | 0.6356 ± 0.0824 | 0.3022 ± 0.0499 | 1.1865 ± 0.1877 | 2.5806 ± 0.2378 | 12.5283 ± 3.5568 | 0.9988 ± 0.0003 |
-| **XGBoost (Jivit Hybrid Base)** | 10 Raw | 120,375 nodes | 0.6757 ± 0.0949 | 0.3016 ± 0.0501 | 1.2090 ± 0.2009 | 2.7325 ± 0.2874 | 15.0811 ± 4.0863 | 0.9987 ± 0.0004 |
-| **Random Forest (Phase 1)** | 38 One-Hot | 185,636 nodes | 1.4543 ± 0.0504 | 0.6545 ± 0.0148 | 2.6878 ± 0.0574 | 6.0583 ± 0.0589 | 24.6490 ± 2.2994 | 0.9939 ± 0.0004 |
-| **Tuned MLP** | 10 Raw | 204,289 params | 1.7295 ± 0.0721 | 1.1464 ± 0.0537 | 3.6101 ± 0.1256 | 5.8123 ± 0.2743 | 36.1018 ± 7.1832 | 0.9914 ± 0.0007 |
-| **Naive Baseline** | Raw target | 1 param | 18.6559 ± 0.0012 | 14.8991 ± 0.0159 | 40.9058 ± 0.0477 | 44.8921 ± 0.0477 | 50.9211 ± 0.0477 | -0.0006 ± 0.0001 |
+| **XGBoost (Phase 1 Tuned)** | 23 engineered features (ratios + log transforms) | 111,228 nodes | **0.5602 ± 0.0284** | **0.2130 ± 0.0085** | **0.8736 ± 0.0356** | **2.4743 ± 0.1206** | **11.7142 ± 1.1033** | **0.9991 ± 0.0001** |
+| **Residual Hybrid** | 10 raw features (XGB base + residual MLP) | 11,777 params (MLP only) | 0.6356 ± 0.0824 | 0.3022 ± 0.0499 | 1.1865 ± 0.1877 | 2.5806 ± 0.2378 | 12.5283 ± 3.5568 | 0.9988 ± 0.0003 |
+| **XGBoost (Jivit Hybrid Base)** | 10 raw features | 120,375 nodes | 0.6757 ± 0.0949 | 0.3016 ± 0.0501 | 1.2090 ± 0.2009 | 2.7325 ± 0.2874 | 15.0811 ± 4.0863 | 0.9987 ± 0.0004 |
+| **Random Forest (Phase 1)** | 38 features (Phase 1 one-hot) | 185,636 nodes | 1.4543 ± 0.0504 | 0.6545 ± 0.0148 | 2.6878 ± 0.0574 | 6.0583 ± 0.0589 | 24.6490 ± 2.2994 | 0.9939 ± 0.0004 |
+| **Tuned MLP** | 10 raw features (quantile normalized) | 204,289 params | 1.7295 ± 0.0721 | 1.1464 ± 0.0537 | 3.6101 ± 0.1256 | 5.8123 ± 0.2743 | 36.1018 ± 7.1832 | 0.9914 ± 0.0007 |
+| **Naive Baseline** | Target only | 1 param | 18.6559 ± 0.0012 | 14.8991 ± 0.0159 | 40.9058 ± 0.0477 | 44.8921 ± 0.0477 | 50.9211 ± 0.0477 | -0.0006 ± 0.0001 |
+
+*Feature Control Note*: Evaluating Tuned MLP and Residual Hybrid on the 23 engineered features requires editing teammates' files (`src/dl/hybrid.py` hardcodes 10 raw features; `src/dl/nn_preprocess.py` restricts numeric inputs to 8 raw measurements). Under team constraints, existing code is preserved and Table 1 discloses that feature sets differ.
 
 #### Table 2: Reported Operating Points from Earlier Single-Seed Runs (Different Training Sizes, Not Comparable)
 
 > [!NOTE]
-> **Non-Comparable Operating Regimes**: The table below compiles operating points reported from earlier single-seed runs across different training partition sizes (ranging from 20,000 to 1,986,397 rows). Because training sample sizes differ by up to two orders of magnitude, these numbers reflect distinct computational operating regimes and cannot be used to rank model architectures.
+> **Non-Comparable Operating Regimes**: The table below compiles operating points reported from earlier single-seed runs across different training partition sizes (ranging from 20,000 to 1,986,397 rows). Because training sample sizes differ by up to two orders of magnitude, these numbers reflect distinct computational operating regimes and cannot be used to rank model architectures. Tail error metrics (P95, P99, Max AE) are excluded because earlier single-seed runs did not save full prediction arrays. All reported values originate strictly from CSV files in `reports/`.
 
-| Model | Training Samples | Size (parameters or tree nodes) | Fit Time (s) | Test MAE | Test RMSE | Test P95 AE | Test P99 AE | Test Max AE | Test $R^2$ |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **XGBoost (Phase 1 Full Data, 23 Eng Features)** | 1,986,397 | 109,501 nodes | 730.0s | 0.1000 | 0.3282 | 0.3720 | 0.9610 | 5.9800 | 0.9997 |
-| **Random Forest (Full Data Trial, 38 Features)** | 1,986,397 | 2,191,352 nodes | 52.41s | 0.2669 | 0.5830 | 0.8240 | 1.7820 | 6.9150 | 0.9990 |
-| **Residual Hybrid (XGB Base + MLP, 10 Raw Features)** | 20,000 | 11,809 params (MLP only) | 76.44s | 0.4110 | 0.8521 | 1.3550 | 2.7300 | 7.5100 | 0.9979 |
-| **Random Forest (Phase 1 100k Benchmark, 38 Features)** | 100,000 | 398,998 nodes | 32.5s | 0.4078 | 0.9197 | 1.5010 | 2.9120 | 8.2400 | 0.9976 |
-| **Tuned MLP (Phase 2 200k Architecture Benchmark)** | 200,000 | 204,289 params | 142.0s | 0.5344 | 0.9306 | 1.7650 | 3.1540 | 9.5800 | 0.9975 |
-| **Naive Baseline (Mean)** | 1,986,397 | 1 param | 0.05s | 14.7725 | 18.5081 | 27.8100 | 34.5900 | 85.1380 | 0.0000 |
+| Model | Feature Set | Training Samples | Size (parameters or tree nodes) | Fit Time (s) | Test MAE | Test RMSE | Test $R^2$ |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **XGBoost (Phase 1 Full Data, 23 Eng Features, Single Seed s=42)** | 23 engineered features (ratios + log transforms) | 1,986,397 | 109,501 nodes | 730.0s | 0.1000 | 0.3282 | 0.9997 |
+| **Random Forest (Full Data Trial, 38 Features, Single Seed s=42)** | 38 features (Phase 1 one-hot) | 1,986,397 | 2,191,352 nodes | 52.41s | 0.2669 | 0.5830 | 0.9990 |
+| **Residual Hybrid (XGB Base + MLP, 10 Raw Features, Single Seed s=42)** | 10 raw features (XGB base + residual MLP) | 20,000 | 11,777 params (MLP only) | 76.44s | 0.4110 | 0.8521 | 0.9979 |
+| **Random Forest (Phase 1 100k Benchmark, 38 Features, Single Seed s=42)** | 38 features (Phase 1 one-hot) | 100,000 | 398,998 nodes | 32.5s | 0.4078 | 0.9197 | 0.9976 |
+| **Tuned MLP (Phase 2 200k Architecture Benchmark, Single Seed s=42)** | 10 raw features (quantile normalized) | 200,000 | 204,289 params | 142.0s | 0.5344 | 0.9306 | 0.9975 |
+| **Naive Baseline (Mean, Single Seed s=42)** | Target only | 1,986,397 | 1 param | 0.05s | 14.7725 | 18.5081 | 0.0000 |
+
+*Note on Full Random Forest*: The full-data Random Forest (1,986,397 rows trained in 52.41s) is a single-seed trial (no std) and is excluded from any direct ranking against the 5-seed controlled table.
+
+#### Table 3: Paired Differences Statistical Analysis Across 5 Random Seeds (`reports/paired_differences.csv`)
+
+| Comparison | Metric | Model 1 ($M_1$) | Model 2 ($M_2$) | Mean Difference | Std Difference | Seeds $M_1$ Better | Total Seeds | Win Rate $M_1$ |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Hybrid vs XGB Base** | RMSE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | **+0.0400** | 0.0150 | 5 | 5 | **5/5** |
+| **Hybrid vs XGB Base** | MAE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | -0.0006 | 0.0059 | 2 | 5 | 2/5 |
+| **Hybrid vs XGB Base** | P95 AE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | +0.0225 | 0.0269 | 4 | 5 | 4/5 |
+| **Hybrid vs XGB Base** | P99 AE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | **+0.1520** | 0.0634 | 5 | 5 | **5/5** |
+| **Hybrid vs XGB Base** | Max AE | Residual Hybrid (10 Raw) | XGBoost Base (10 Raw) | **+2.5528** | 0.9175 | 5 | 5 | **5/5** |
+| **Tuned XGB vs Hybrid** | RMSE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | **+0.0754** | 0.0652 | 5 | 5 | **5/5** |
+| **Tuned XGB vs Hybrid** | MAE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | **+0.0892** | 0.0564 | 5 | 5 | **5/5** |
+| **Tuned XGB vs Hybrid** | P95 AE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | **+0.3129** | 0.2098 | 5 | 5 | **5/5** |
+| **Tuned XGB vs Hybrid** | P99 AE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | +0.1063 | 0.2020 | 3 | 5 | 3/5 |
+| **Tuned XGB vs Hybrid** | Max AE | XGBoost Tuned (23 Eng) | Residual Hybrid (10 Raw) | +0.8141 | 2.5716 | 2 | 5 | 2/5 |
+
+*Key Findings from Paired Statistical Analysis*:
+- **Hybrid vs. XGBoost Base**: Hybrid beats Base in 5/5 seeds on RMSE (+0.0400), 5/5 on P99 AE (+0.1520), and 5/5 on Max AE (+2.5528). On P95 AE, Hybrid beats Base on 4 of 5 seeds (on seed 1011, Base achieves slightly lower error: 1.2564 vs 1.2666), so **no claim of a consistent tail benefit is made on P95**.
+- **Tuned XGBoost vs. Hybrid**: Tuned XGBoost beats Hybrid on 5/5 seeds for RMSE (+0.0754), MAE (+0.0892), and P95 AE (+0.3129), but in extreme tails, the Hybrid achieves lower Max AE on 3 of 5 seeds.
+- **Model Size Measurement**: Tuned MLP has 204,289 parameters; full RF has 2,191,352 tree nodes; XGBoost has 109,501 tree nodes. The Hybrid contains an MLP residual network of exactly **11,777 parameters** measured strictly via `sum(p.numel() for p in model.parameters())` (earlier 11,809 was an arithmetic typo and 46,809 was an unverified placeholder estimate).
 
 ### 10.2 Technical Validation & Anti-Leakage Audit
 All five technical validation checks automated in `reports/leakage_check.csv` pass:
@@ -651,8 +675,6 @@ All five technical validation checks automated in `reports/leakage_check.csv` pa
 - **Target standardization**: mean and standard deviation computed strictly from `y_train`.
 - **Spatial GroupKFold isolation**: zero overlapping monitoring stations (`Area`) in OOF evaluation folds.
 - **Forbidden features**: formula components (`F1`, `F2`, `F3`, `excursions`, `CCME_WQI`) strictly excluded.
-
-Full details and theoretical derivations: see [docs/notes_phase2_parth.md](docs/notes_phase2_parth.md).
 
 ---
 
