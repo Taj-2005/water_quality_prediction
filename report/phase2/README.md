@@ -6,6 +6,9 @@ selection, and the leakage-safe residual hybrid. It links the Phase 1 findings t
 Phase 2 motivation and distinguishes saved results from evaluations that remain
 outstanding.
 
+The companion Phase 2 presentation is included as
+`water_quality_prediction_phase2_presentation.pdf`.
+
 ## Evidence included
 
 - Phase 1 benchmark and partial-measurement context, attributed to the companion IEEE PDF.
