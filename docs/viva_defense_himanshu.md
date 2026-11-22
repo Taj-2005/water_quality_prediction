@@ -152,10 +152,19 @@ If the teacher asks: *"Show me your code or tell me how it works."*
 
 ---
 
-### Q8: "How does your tuned MLP compare to the tree models (Random Forest and XGBoost)?"
-> **Answer to say:**  
-> *"Our Tuned MLP got very close to Random Forest (0.534 test MAE vs 0.408 for RF), but with less than 10% of the parameter size (204k vs 2.3M parameters).*  
-> *XGBoost was still the top model at 0.10 MAE. As shown in research by Grinsztajn et al. (2022), decision trees excel at tabular threshold rules (like legal cutoff limits) because they make axis-aligned cuts, whereas neural networks prefer smooth relationships."*
+### Q8: "Which model gave the best accuracy / R² score, and WHY?"
+> **Answer to say (memorize this simple answer):**  
+> *"Across the **entire project**, **XGBoost (Phase 1)** achieved the highest score with an **R² of 0.9997** and a Test MAE of **0.0999**.*  
+> *Within our **Deep Learning models (Phase 2)**, the **Tuned MLP** achieved the best score with an **R² of 0.9975** and Test MAE of **0.5344**, cutting the Base MLP error in half.*
+> 
+> ***Why XGBoost was best overall:***  
+> *1. **Step-function cutoff rules:** Water quality standards have sharp legal limits (e.g. pH < 6.5 or DO < 4.0 mg/L). Tree models make sharp, axis-aligned cuts ('if pH < 6.5 then add penalty'), which fit regulatory step-functions much better than neural networks (Grinsztajn et al., NeurIPS 2022).*  
+> *2. **Gradient Boosting:** XGBoost sequentially trains 1,991 trees where each tree directly corrects the residual errors of the previous trees.*
+> 
+> ***Why Tuned MLP was best in Deep Learning:***  
+> *1. **Depth (4 layers vs 2 layers):** Calculating the CCME WQI is a multi-step formula (chemical reactions → threshold excursions → root-sum-square index). 4 layers gave the network the hierarchical capacity to learn this.*  
+> *2. **GELU activation:** Avoided the 'dying ReLU' issue in deeper layers, keeping all neurons active.*  
+> *3. **Parameter capacity & learning rate:** 204k parameters with an optimal learning rate (0.00219) found by Optuna without overfitting."*
 
 ---
 
