@@ -9,7 +9,10 @@ leakage-safe split.
 | Phase | Scope | Models | Status |
 | :--- | :--- | :--- | :--- |
 | **Phase 1** | Classical machine learning | Naive baseline, Random Forest, XGBoost | **Completed** |
-| **Phase 2** (planned) | Deep learning + optional hybrid | Regularized MLP (PyTorch), optional MLP-on-residuals hybrid | **Next** |
+| **Phase 2** | Deep learning and hybrid evaluation | Regularized MLP (PyTorch), XGBoost + MLP residual hybrid | **Completed*** |
+
+*The Phase 2 report documents a few planned analyses that still lack saved empirical
+outputs; see [Outstanding evaluation items](#phase-2-outstanding-evaluation-items).*
 
 ---
 
@@ -27,9 +30,20 @@ leakage-safe split.
 - **Formal Academic Deliverables**:
   - **IEEE Conference Report**: Full 8-page paper compiled at [report/water_quality_prediction_phase1_report.pdf](report/water_quality_prediction_phase1_report.pdf).
   - **Presentation Deck**: 7-slide presentation committed at [presentation/phase1_presentation.pdf](presentation/phase1_presentation.pdf).
-  - **Phase 2 Presentation Deck**: [presentation/phase2_presentation.pdf](presentation/phase2_presentation.pdf).
   - **Viva Preparation**: 77 defense questions across 9 areas in [docs/viva_prep.md](docs/viva_prep.md) and rehearsal schedule in [docs/mock_viva_plan.md](docs/mock_viva_plan.md).
-- **Next Phase**: **Phase 2 (Deep Learning / PyTorch MLP)** on the identical split, preprocessing, and evaluation contracts.
+
+**Phase 2 (Deep Learning and Hybrid Evaluation) is COMPLETE.** The Phase 2 work extends
+the same saved, area-grouped split and reports neural preprocessing, architecture and
+regularization studies, a leakage-safe residual hybrid, and a controlled five-seed
+comparison. The IEEE-format report and presentation are available here:
+
+- **IEEE conference report:** [report/phase2/water_quality_prediction_phase2_report.pdf](report/phase2/water_quality_prediction_phase2_report.pdf) ([LaTeX source](report/phase2/main.tex)).
+- **Presentation deck:** [presentation/phase2_presentation.pdf](presentation/phase2_presentation.pdf).
+- **Phase 2 experiment evidence:** [reports/final_comparison_summary.csv](reports/final_comparison_summary.csv), [reports/leakage_check.csv](reports/leakage_check.csv), [reports/paired_differences.csv](reports/paired_differences.csv), and the architecture/hybrid artifacts under [reports/](reports/).
+- **Headline controlled result:** with 20,000 training rows across five seeds, the engineered-feature XGBoost has test MAE $0.2130\pm0.0085$ and RMSE $0.5602\pm0.0284$. The residual hybrid's RMSE is lower than its raw-feature XGBoost base in all five paired seeds; its MAE advantage is not consistent.
+
+Phase 2 is complete as a project/report deliverable, with the remaining evaluation gaps
+listed explicitly rather than presented as completed findings.
 
 ---
 
@@ -41,12 +55,12 @@ incompatible water quality standards.
 
 - **Target Column:** `CCME_Values` (see [docs/target_definition.md](docs/target_definition.md))
 - **Problem Type:** **Regression** (continuous CCME Water Quality Index ranging from 31.304 to 100.0)
-- **Gap being addressed:** tree models are strong on tabular data but may not capture
-  smooth multi-sensor interactions or produce calibrated uncertainty as efficiently.
-  Phase 2 tests whether a regularized MLP closes that gap on the same split.
+- **Gap addressed:** tree models are strong on tabular data; Phase 2 tested whether a
+  regularized MLP and residual hybrid improve on them under the shared split and
+  preprocessing contract, and added calibration and explainability tooling.
 - **Deliverable:** a comparison of Random Forest / XGBoost (Phase 1) and an MLP
-  (Phase 2), with an explicit target definition, missing-data treatment, and feature
-  importance analysis.
+  and residual hybrid (Phase 2), with an explicit target definition, missing-data
+  treatment, leakage checks, error analysis, and documented limitations.
 
 ### Target definition and leakage
 
@@ -174,8 +188,11 @@ water_quality_prediction/
 ├── reports/                     # figures + per-module training logs. NOT for citation
 │   ├── figures/                 # every figure used by the report and deck
 │   └── *.csv                    # training-time logs, see reports/README.md
-├── report/                      # IEEE LaTeX source; make_tables.py generates tables
-│   └── water_quality_prediction_phase1_report.pdf
+├── report/                      # IEEE reports and sources
+│   ├── water_quality_prediction_phase1_report.pdf
+│   └── phase2/
+│       ├── main.tex
+│       └── water_quality_prediction_phase2_report.pdf
 ├── presentation/
 │   ├── phase1_presentation.pdf  # Phase 1 deck
 │   └── phase2_presentation.pdf  # Phase 2 deck
@@ -677,6 +694,21 @@ All five technical validation checks automated in `reports/leakage_check.csv` pa
 - **Target standardization**: mean and standard deviation computed strictly from `y_train`.
 - **Spatial GroupKFold isolation**: zero overlapping monitoring stations (`Area`) in OOF evaluation folds.
 - **Forbidden features**: formula components (`F1`, `F2`, `F3`, `excursions`, `CCME_WQI`) strictly excluded.
+
+### Phase 2 outstanding evaluation items
+
+The core Phase 2 experiments, controlled comparison, report, and presentation are
+complete. The report does not claim every item in the original work plan was measured:
+
+- No saved empirical calibration or prediction-interval coverage results are available.
+- No saved MLP feature-attribution/permutation-importance results are available.
+- Country- and area-level error summaries are available, but a temporal error analysis
+  is not.
+
+The corresponding calibration and explainability implementations/notebooks are in the
+repository; the bullets above distinguish available tooling from completed empirical
+results. See the [Phase 2 report](report/phase2/water_quality_prediction_phase2_report.pdf)
+for methods, results, and limitations.
 
 ---
 
