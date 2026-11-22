@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -193,6 +194,12 @@ def run_config(
         use_batch_norm=cfg["use_batch_norm"],
     )
 
+    dims_str = "_".join(map(str, cfg["hidden_dims"]))
+    ckpt_name = f"arch_{dims_str}_{cfg['activation']}_{seed}.pt"
+    ckpt_file = Path("checkpoints") / ckpt_name
+    if ckpt_file.exists():
+        ckpt_file.unlink(missing_ok=True)
+
     train_cfg = {
         "epochs": cfg["epochs"],
         "lr": cfg["lr"],
@@ -201,26 +208,31 @@ def run_config(
         "loss": cfg["loss"],
         "early_stopping_patience": cfg["early_stopping_patience"],
         "scheduler": cfg["scheduler"],
+        "model_name": ckpt_name,
         "seed": seed,
         "eval_test": False,
         "log_to_csv": False,
         "verbose": verbose,
     }
 
-    history, best_val = train(model, loaders, train_cfg)
+    try:
+        history, best_val = train(model, loaders, train_cfg)
 
-    test: dict[str, float] = {}
-    if eval_test:
-        device = get_device(None)
-        _, test = evaluate_loader(
-            model.to(device),
-            loaders.test,
-            get_loss_function(cfg["loss"]).to(device),
-            device,
-            y_mean=loaders.y_mean,
-            y_std=loaders.y_std,
-            scale_target=loaders.scale_target,
-        )
+        test: dict[str, float] = {}
+        if eval_test:
+            device = get_device(None)
+            _, test = evaluate_loader(
+                model.to(device),
+                loaders.test,
+                get_loss_function(cfg["loss"]).to(device),
+                device,
+                y_mean=loaders.y_mean,
+                y_std=loaders.y_std,
+                scale_target=loaders.scale_target,
+            )
+    finally:
+        if ckpt_file.exists():
+            ckpt_file.unlink(missing_ok=True)
 
     n_params = sum(p.numel() for p in model.parameters())
     gap = (
@@ -723,7 +735,119 @@ def main() -> None:
     parser.add_argument("--train-rows", type=int, default=200_000, help="Train subsample size")
     parser.add_argument("--seeds", type=int, default=5, help="Number of seeds to run (1 to 5)")
     parser.add_argument("--trials", type=int, default=15, help="Number of Optuna tuning trials")
+    parser.add_argument(
+        "--append-seeds",
+        type=int,
+        nargs="+",
+        help="Extend existing ablation sweep with additional seeds instead of re-running from scratch.",
+    )
     args = parser.parse_args()
+
+    if args.append_seeds:
+        raw_csv = REPORTS / "mlp_ablation_raw.csv"
+        agg_csv = REPORTS / "mlp_ablation.csv"
+        if not raw_csv.exists():
+            raise FileNotFoundError(f"Cannot append seeds: {raw_csv} does not exist.")
+        existing_raw = pd.read_csv(raw_csv)
+        have = set(existing_raw["seed"].unique())
+        todo = [s for s in args.append_seeds if s not in have]
+        arrays = prepare_data(train_rows=args.train_rows)
+        if todo:
+            print(f"Existing seeds in sweep: {sorted(have)} -> Running additional seeds: {todo}\n")
+            extra_raw, _ = run_architecture_ablation(
+                arrays=arrays,
+                seeds=todo,
+                train_rows=args.train_rows,
+                grid=ARCHITECTURE_GRID,
+                verbose=True,
+            )
+            raw_df = pd.concat([existing_raw, extra_raw], ignore_index=True)
+            agg_df = aggregate_ablation(raw_df)
+            raw_df.to_csv(raw_csv, index=False)
+            agg_df.to_csv(agg_csv, index=False)
+            print(
+                f"Updated: {raw_csv} and {agg_csv} ({len(raw_df)} runs across {len(agg_df)} configs)"
+            )
+        else:
+            print(f"Seeds {args.append_seeds} already present in {raw_csv}.")
+            raw_df = existing_raw
+            agg_df = aggregate_ablation(raw_df)
+
+        all_seeds = [int(s) for s in sorted(raw_df["seed"].unique())]
+        print(
+            f"\n--- Multi-Seed Confirmation on Validation & Test ({len(all_seeds)} seeds: {all_seeds}) ---"
+        )
+        trials_csv = REPORTS / "mlp_optuna_trials.csv"
+        if trials_csv.exists():
+            trials_df = pd.read_csv(trials_csv)
+            best_idx = trials_df["val_mae"].idxmin()
+            best_row = trials_df.loc[best_idx]
+            import ast
+
+            best_hidden = (
+                ast.literal_eval(best_row["hidden_dims"])
+                if isinstance(best_row["hidden_dims"], str)
+                else best_row["hidden_dims"]
+            )
+            best_cfg = {
+                "hidden_dims": tuple(best_hidden),
+                "activation": best_row["activation"],
+                "lr": float(best_row["lr"]),
+                "weight_decay": float(best_row["weight_decay"]),
+            }
+        else:
+            best_cfg = {
+                "hidden_dims": (256, 256, 256, 256),
+                "activation": "gelu",
+                "lr": 0.00219,
+                "weight_decay": 0.0,
+            }
+            trials_df = None
+
+        print(f"Tuned configuration: {best_cfg}")
+        tuned_df, tuned_summary, tuned_history = run_multiseed_evaluation(
+            config=best_cfg,
+            arrays=arrays,
+            seeds=all_seeds,
+            train_rows=args.train_rows,
+            eval_test=True,
+            verbose=True,
+        )
+        tuned_summary["architecture"] = str(best_cfg["hidden_dims"])
+        tuned_summary["activation"] = str(best_cfg["activation"])
+
+        base_df, base_summary, _ = run_multiseed_evaluation(
+            config=BASE_CONFIG,
+            arrays=arrays,
+            seeds=all_seeds,
+            train_rows=args.train_rows,
+            eval_test=True,
+            verbose=False,
+        )
+
+        dummy_model_base = WaterQualityMLP(arrays[0].shape[1], BASE_CONFIG["hidden_dims"])
+        dummy_model_tuned = WaterQualityMLP(
+            arrays[0].shape[1],
+            best_cfg["hidden_dims"],
+            activation=best_cfg["activation"],
+        )
+
+        results_table = build_mlp_results_table(
+            base_mlp_summary=base_summary,
+            tuned_mlp_summary=tuned_summary,
+            n_params_base=sum(p.numel() for p in dummy_model_base.parameters()),
+            n_params_tuned=sum(p.numel() for p in dummy_model_tuned.parameters()),
+        )
+
+        results_csv = REPORTS / "mlp_results.csv"
+        results_table.to_csv(results_csv, index=False)
+        print(f"\nSaved final results to: {results_csv}")
+        print(results_table.to_string(index=False))
+
+        print("\n--- Generating Architecture Diagnostic Visualizations ---")
+        generate_architecture_plots(agg_df, trials_df, tuned_history)
+        print("Visualizations saved to reports/figures/")
+        return
 
     seeds = [SEED] if args.quick else TEAM_SEEDS[: args.seeds]
     train_rows = 20_000 if args.quick else args.train_rows

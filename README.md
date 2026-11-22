@@ -350,9 +350,12 @@ Reads the Phase 1 split indices, trains the base neural baseline, and executes t
 
 ```bash
 # Architecture sweep and validation-only Optuna tuning:
-# Sweeps depth, width, activations across seeds, runs Optuna study,
+# Sweeps depth, width, activations across 5 seeds, runs Optuna study,
 # evaluates tuned model on 5 seeds on validation and test, and generates diagnostic figures.
-python -m src.dl.architecture --seeds 3 --train-rows 100000 --trials 10
+python -m src.dl.architecture --seeds 5 --train-rows 100000 --trials 10
+
+# Extend an existing sweep with more seeds instead of re-running from scratch:
+python -m src.dl.architecture --append-seeds 789 1011
 
 # Fast verification / smoke test (1 seed, 20,000 rows, 3 epochs, ~30s)
 python -m src.dl.architecture --quick
