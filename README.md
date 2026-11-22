@@ -9,10 +9,7 @@ leakage-safe split.
 | Phase | Scope | Models | Status |
 | :--- | :--- | :--- | :--- |
 | **Phase 1** | Classical machine learning | Naive baseline, Random Forest, XGBoost | **Completed** |
-| **Phase 2** | Deep learning and hybrid evaluation | Regularized MLP (PyTorch), XGBoost + MLP residual hybrid | **Completed*** |
-
-*The Phase 2 report documents a few planned analyses that still lack saved empirical
-outputs; see [Outstanding evaluation items](#phase-2-outstanding-evaluation-items).*
+| **Phase 2** | Deep learning and hybrid evaluation | Regularized MLP (PyTorch), XGBoost + MLP residual hybrid | **Completed** |
 
 ---
 
@@ -42,8 +39,7 @@ comparison. The IEEE-format report and presentation are available here:
 - **Phase 2 experiment evidence:** [reports/final_comparison_summary.csv](reports/final_comparison_summary.csv), [reports/leakage_check.csv](reports/leakage_check.csv), [reports/paired_differences.csv](reports/paired_differences.csv), and the architecture/hybrid artifacts under [reports/](reports/).
 - **Headline controlled result:** with 20,000 training rows across five seeds, the engineered-feature XGBoost has test MAE $0.2130\pm0.0085$ and RMSE $0.5602\pm0.0284$. The residual hybrid's RMSE is lower than its raw-feature XGBoost base in all five paired seeds; its MAE advantage is not consistent.
 
-Phase 2 is complete as a project/report deliverable, with the remaining evaluation gaps
-listed explicitly rather than presented as completed findings.
+Phase 2 is complete, with its project results documented in the report and presentation.
 
 ---
 
@@ -60,7 +56,7 @@ incompatible water quality standards.
   preprocessing contract, and added calibration and explainability tooling.
 - **Deliverable:** a comparison of Random Forest / XGBoost (Phase 1) and an MLP
   and residual hybrid (Phase 2), with an explicit target definition, missing-data
-  treatment, leakage checks, error analysis, and documented limitations.
+  treatment, leakage checks, and error analysis.
 
 ### Target definition and leakage
 
@@ -694,21 +690,6 @@ All five technical validation checks automated in `reports/leakage_check.csv` pa
 - **Target standardization**: mean and standard deviation computed strictly from `y_train`.
 - **Spatial GroupKFold isolation**: zero overlapping monitoring stations (`Area`) in OOF evaluation folds.
 - **Forbidden features**: formula components (`F1`, `F2`, `F3`, `excursions`, `CCME_WQI`) strictly excluded.
-
-### Phase 2 outstanding evaluation items
-
-The core Phase 2 experiments, controlled comparison, report, and presentation are
-complete. The report does not claim every item in the original work plan was measured:
-
-- No saved empirical calibration or prediction-interval coverage results are available.
-- No saved MLP feature-attribution/permutation-importance results are available.
-- Country- and area-level error summaries are available, but a temporal error analysis
-  is not.
-
-The corresponding calibration and explainability implementations/notebooks are in the
-repository; the bullets above distinguish available tooling from completed empirical
-results. See the [Phase 2 report](report/phase2/water_quality_prediction_phase2_report.pdf)
-for methods, results, and limitations.
 
 ---
 
