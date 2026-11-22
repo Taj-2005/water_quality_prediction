@@ -1,6 +1,6 @@
-model,training_size,n_params_exact,train_time_s,inference_time_100k_s,hardware,framework
+model,training_size,size (parameters or tree nodes),train_time_s,inference_time_100k_s,hardware,framework
 Naive Baseline,20000,1,0.0,0.0004,arm (8 cores),numpy
-Random Forest,20000,189884,0.347,0.1222,arm (8 cores),scikit-learn
-XGBoost,20000,109501,47.64,1.6512,arm (8 cores),xgboost
-Tuned MLP (256x4 GELU),20000,204289,17.207,0.1893,arm (8 cores),pytorch-2.15.0
-Hybrid (XGBoost + Residual MLP),20000,46809,53.02,1.8405,arm (8 cores),xgboost + pytorch
+Random Forest,20000,189884,0.387,0.1159,arm (8 cores),scikit-learn
+"XGBoost (Phase 1 Tuned, 23 Eng Features)",20000,109501,48.123,1.6714,arm (8 cores),xgboost
+Tuned MLP (256x4 GELU),20000,204289,17.232,0.1882,arm (8 cores),pytorch-2.15.0
+Hybrid (XGBoost Base + Residual MLP),20000,11809,55.26,1.8595,arm (8 cores),xgboost + pytorch (size: MLP only)
