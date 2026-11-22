@@ -17,7 +17,7 @@ Phase 2 Work Plan Deliverables (Satya):
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import numpy as np
@@ -29,6 +29,7 @@ from src.metrics import (
     calibration_summary,
     category_calibration_summary,
     expected_calibration_error,
+    regression_metrics,
     reliability_diagram_data,
 )
 
@@ -393,6 +394,64 @@ def permutation_feature_importance_mlp(
     return df
 
 
+def mc_dropout_predictions(
+    model: nn.Module,
+    x: torch.Tensor,
+    passes: int = 50,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Backward-compatible MC-dropout API returning predictive mean and variance."""
+    if passes < 2:
+        raise ValueError("passes must be at least 2")
+    if not any(isinstance(module, nn.Dropout) for module in model.modules()):
+        raise ValueError("MC dropout requires at least one nn.Dropout module")
+
+    was_training = model.training
+    samples: list[np.ndarray] = []
+    try:
+        enable_dropout_only(model)
+        with torch.no_grad():
+            for _ in range(passes):
+                samples.append(model(x).detach().cpu().numpy().reshape(-1))
+    finally:
+        model.train(was_training)
+    values = np.stack(samples)
+    return values.mean(axis=0), values.var(axis=0, ddof=1)
+
+
+def prediction_intervals(
+    y_true: Iterable[float],
+    mean: Iterable[float],
+    variance: Iterable[float],
+    coverage: float = 0.90,
+) -> dict[str, float]:
+    """Backward-compatible Gaussian-style interval coverage and width."""
+    if not 0.0 < coverage < 1.0:
+        raise ValueError("coverage must be between 0 and 1")
+    from scipy.stats import norm
+
+    y = _to_numpy(y_true)
+    mu = _to_numpy(mean)
+    var = _to_numpy(variance)
+    if not y.shape == mu.shape == var.shape:
+        raise ValueError("y_true, mean and variance must have the same shape")
+    z = float(norm.ppf(0.5 + coverage / 2.0))
+    half_width = z * np.sqrt(np.maximum(var, 0.0))
+    lower, upper = mu - half_width, mu + half_width
+    return {
+        "PICP": float(np.mean((y >= lower) & (y <= upper))),
+        "MPIW": float(np.mean(upper - lower)),
+    }
+
+
+def continuous_model_metrics(
+    y_true: Iterable[float], y_pred: Iterable[float]
+) -> dict[str, float]:
+    """Return the shared project regression metrics for iterable inputs."""
+    y = _to_numpy(y_true)
+    pred = _to_numpy(y_pred)
+    return regression_metrics(y, pred)
+
+
 __all__ = [
     "prediction_interval_coverage",
     "calibrate_conformal_quantile",
@@ -405,4 +464,7 @@ __all__ = [
     "expected_calibration_error",
     "category_calibration_summary",
     "calibration_summary",
+    "mc_dropout_predictions",
+    "prediction_intervals",
+    "continuous_model_metrics",
 ]
