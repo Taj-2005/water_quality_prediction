@@ -17,7 +17,8 @@ Phase 2 Work Plan Deliverables (Satya):
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -340,7 +341,10 @@ def permutation_feature_importance_mlp(
     y_np = _to_numpy(y)
 
     if metric_fn is None:
-        metric_fn = lambda yt, yp: float(np.mean(np.abs(yt - yp)))
+        def eval_metric(yt: np.ndarray, yp: np.ndarray) -> float:
+            return float(np.mean(np.abs(yt - yp)))
+    else:
+        eval_metric = metric_fn
 
     model = model.to(device)
     model.eval()
@@ -355,7 +359,7 @@ def permutation_feature_importance_mlp(
         return np.concatenate(preds)
 
     baseline_preds = _predict(x_np)
-    baseline_score = metric_fn(y_np, baseline_preds)
+    baseline_score = eval_metric(y_np, baseline_preds)
 
     rng = np.random.default_rng(random_state)
     n_features = x_np.shape[1]
@@ -371,7 +375,7 @@ def permutation_feature_importance_mlp(
             x_perm[:, col_idx] = permuted_col
 
             perm_preds = _predict(x_perm)
-            perm_score = metric_fn(y_np, perm_preds)
+            perm_score = eval_metric(y_np, perm_preds)
             # Importance = error increase after corrupting feature
             scores.append(perm_score - baseline_score)
 

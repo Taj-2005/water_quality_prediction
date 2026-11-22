@@ -12,9 +12,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-torch = pytest.importorskip("torch", reason="PyTorch is required for DL calibration tests")
-nn = torch.nn
-
 from src.dl.calibration import (
     calibrate_conformal_quantile,
     conformal_prediction_intervals,
@@ -24,6 +21,9 @@ from src.dl.calibration import (
     permutation_feature_importance_mlp,
     prediction_interval_coverage,
 )
+
+torch = pytest.importorskip("torch", reason="PyTorch is required for DL calibration tests")
+nn = torch.nn
 
 
 class DummyMLPWithDropout(nn.Module):
