@@ -1,0 +1,11 @@
+comparison,metric,model_1,model_2,mean_difference,std_difference,seeds_m1_better,total_seeds,win_rate_m1
+Hybrid vs XGBoost Base (10 raw),RMSE,"Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)","XGBoost (Jivit Hybrid Base, 10 Raw Features)",0.04,0.015,5,5,5/5
+Hybrid vs XGBoost Base (10 raw),MAE,"Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)","XGBoost (Jivit Hybrid Base, 10 Raw Features)",-0.0006,0.0059,2,5,2/5
+Hybrid vs XGBoost Base (10 raw),P95 AE,"Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)","XGBoost (Jivit Hybrid Base, 10 Raw Features)",0.0225,0.0269,4,5,4/5
+Hybrid vs XGBoost Base (10 raw),P99 AE,"Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)","XGBoost (Jivit Hybrid Base, 10 Raw Features)",0.152,0.0634,5,5,5/5
+Hybrid vs XGBoost Base (10 raw),Max AE,"Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)","XGBoost (Jivit Hybrid Base, 10 Raw Features)",2.5528,0.9175,5,5,5/5
+Tuned XGBoost (23 eng) vs Hybrid,RMSE,"XGBoost (Phase 1 Tuned, 23 Eng Features)","Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",0.0754,0.0652,5,5,5/5
+Tuned XGBoost (23 eng) vs Hybrid,MAE,"XGBoost (Phase 1 Tuned, 23 Eng Features)","Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",0.0892,0.0564,5,5,5/5
+Tuned XGBoost (23 eng) vs Hybrid,P95 AE,"XGBoost (Phase 1 Tuned, 23 Eng Features)","Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",0.3129,0.2098,5,5,5/5
+Tuned XGBoost (23 eng) vs Hybrid,P99 AE,"XGBoost (Phase 1 Tuned, 23 Eng Features)","Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",0.1063,0.202,3,5,3/5
+Tuned XGBoost (23 eng) vs Hybrid,Max AE,"XGBoost (Phase 1 Tuned, 23 Eng Features)","Hybrid (XGBoost Base + Residual MLP, 10 Raw Features)",0.8141,2.5716,2,5,2/5
